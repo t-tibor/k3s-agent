@@ -1,0 +1,24 @@
+@KubernetesAiAgent.Agent_HostAddress = http://localhost:5192
+
+GET {{KubernetesAiAgent.Agent_HostAddress}}/health
+Accept: application/json
+
+###
+
+GET {{KubernetesAiAgent.Agent_HostAddress}}/v1/models
+Accept: application/json
+
+###
+
+POST {{KubernetesAiAgent.Agent_HostAddress}}/v1/chat/completions
+Content-Type: application/json
+
+{
+  "model": "kubernetes-agent",
+  "messages": [
+    { "role": "user", "content": "Which pods are currently restarting?" }
+  ],
+  "stream": false
+}
+
+###
