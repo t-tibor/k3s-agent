@@ -3,22 +3,22 @@ using KubernetesAiAgent.Agent.Configuration;
 
 namespace KubernetesAiAgent.Tests.Configuration;
 
-public sealed class OpenRouterOptionsTests
+public sealed class ModelConnectionOptionsTests
 {
     [Fact]
     public void Validate_DefaultOptions_Fails_BecauseApiKeyIsMissing()
     {
-        var options = new OpenRouterOptions();
+        var options = new ModelConnectionOptions();
 
         var results = Validate(options);
 
-        Assert.Contains(results, r => r.MemberNames.Contains(nameof(OpenRouterOptions.ApiKey)));
+        Assert.Contains(results, r => r.MemberNames.Contains(nameof(ModelConnectionOptions.ApiKey)));
     }
 
     [Fact]
     public void Validate_WithApiKey_Succeeds()
     {
-        var options = new OpenRouterOptions { ApiKey = "sk-or-test" };
+        var options = new ModelConnectionOptions { ApiKey = "sk-or-test" };
 
         var results = Validate(options);
 
@@ -28,24 +28,24 @@ public sealed class OpenRouterOptionsTests
     [Fact]
     public void Validate_MissingModel_Fails()
     {
-        var options = new OpenRouterOptions { ApiKey = "sk-or-test", Model = "" };
+        var options = new ModelConnectionOptions { ApiKey = "sk-or-test", Model = "" };
 
         var results = Validate(options);
 
-        Assert.Contains(results, r => r.MemberNames.Contains(nameof(OpenRouterOptions.Model)));
+        Assert.Contains(results, r => r.MemberNames.Contains(nameof(ModelConnectionOptions.Model)));
     }
 
     [Fact]
     public void Validate_MissingEndpoint_Fails()
     {
-        var options = new OpenRouterOptions { ApiKey = "sk-or-test", Endpoint = "" };
+        var options = new ModelConnectionOptions { ApiKey = "sk-or-test", Endpoint = "" };
 
         var results = Validate(options);
 
-        Assert.Contains(results, r => r.MemberNames.Contains(nameof(OpenRouterOptions.Endpoint)));
+        Assert.Contains(results, r => r.MemberNames.Contains(nameof(ModelConnectionOptions.Endpoint)));
     }
 
-    private static List<ValidationResult> Validate(OpenRouterOptions options)
+    private static List<ValidationResult> Validate(ModelConnectionOptions options)
     {
         var results = new List<ValidationResult>();
         Validator.TryValidateObject(options, new ValidationContext(options), results, validateAllProperties: true);

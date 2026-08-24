@@ -134,8 +134,8 @@ Browser -> NextChat (server-side proxy) -> Kubernetes Agent
 ```
 
 Because the call to the Agent happens server-side rather than from browser JavaScript, the Agent's CORS policy
-(`Agent:AllowedOrigins`) is not exercised by this default frontend — it remains available, unused, for any future
-browser-direct frontend (§20 design principle 5).
+(which allows any origin — no credentials are sent cross-origin by this API) is not exercised by this default
+frontend — it remains available, unused, for any future browser-direct frontend (§20 design principle 5).
 
 ### 3.2 Container requirements
 
@@ -205,7 +205,7 @@ The backend must:
 7. Log agent/tool activity without logging secrets.
 8. Expose health/readiness endpoints.
 9. Enforce application-level read-only policy.
-10. Support configuration through `appsettings.json` and environment variables.
+10. Support configuration through `agentconfig.yaml` and environment variables.
 
 ---
 
@@ -332,20 +332,19 @@ authenticated with a Bearer API key).
 V1 pins a DeepSeek V4 Flash model, but configuration must not otherwise assume a specific model name — swapping to
 a different OpenRouter-hosted model is a configuration change, not a code change.
 
-Example configuration:
+Example configuration (`agentconfig.yaml`, part of the single `Agent` config root — §10):
 
-```json
-{
-  "OpenRouter": {
-    "Endpoint": "https://openrouter.ai/api/v1",
-    "Model": "deepseek/deepseek-v4-flash-0731",
-    "ApiKey": "..."
-  }
-}
+```yaml
+Agent:
+  ModelConnection:
+    Endpoint: https://openrouter.ai/api/v1
+    Model: deepseek/deepseek-v4-flash-0731
+    ApiKey: "..."
 ```
 
-Environment variables must be supported. Authentication follows OpenRouter's standard mechanism: an
-`Authorization: Bearer <ApiKey>` header.
+Environment variables must be supported (`Agent__ModelConnection__ApiKey`, etc.) — the API key in particular is
+never checked into `agentconfig.yaml` (§20 design principle 6). Authentication follows OpenRouter's standard
+mechanism: an `Authorization: Bearer <ApiKey>` header.
 
 ### 6.3 Hosting
 
@@ -359,31 +358,33 @@ the hosting extension doesn't provide model discovery.
 
 ---
 
-## 7. Kubernetes MCP integration
+## 7. MCP server integration
 
-The agent must connect to the existing Kubernetes MCP server.
+The agent must connect to one or more externally-managed MCP servers — the existing Kubernetes one, and
+potentially others in future (e.g. Prometheus) — each contributing read-only tools.
 
 ### 7.1 Configuration
 
-The MCP server URL must be configurable through application configuration.
+MCP servers are configured as a list under the single `Agent` config root (§10), each with a `Name` (used in logs
+and, if unreachable, in the note appended to the agent's instructions — §7.4) and an `Endpoint`.
 
-Example:
+Example (`agentconfig.yaml`):
 
-```json
-{
-  "KubernetesMcp": {
-    "Endpoint": "http://kubernetes-mcp.default.svc.cluster.local:8080"
-  }
-}
+```yaml
+Agent:
+  McpServers:
+    - Name: k8s-mcp
+      Endpoint: http://kubernetes-mcp.default.svc.cluster.local:8080
 ```
 
-Environment-variable equivalent:
+Environment-variable equivalent (index-based):
 
 ```text
-KubernetesMcp__Endpoint
+Agent__McpServers__0__Name
+Agent__McpServers__0__Endpoint
 ```
 
-The application must not hard-code the MCP endpoint.
+The application must not hard-code any MCP endpoint.
 
 ### 7.2 MCP transport
 
@@ -400,6 +401,14 @@ The agent must not receive mutating Kubernetes tools.
 The Kubernetes MCP server this agent connects to exposes only read-only (`get`/`list`/`watch`) tools by design, so the
 application does not additionally filter the tool list it receives — RBAC and the MCP server's own tool surface are
 the enforcement points (§8), not app-side filtering.
+
+### 7.4 Graceful degradation
+
+Each configured MCP server is connected to independently, with a short timeout. A server that can't be reached
+must not fail agent startup or the readiness probe (§12, §16) — it simply contributes no tools, and the other
+configured servers are unaffected. When one or more servers are unreachable, the agent's instructions must be
+augmented with a note naming which servers are unavailable, so the model can tell the user it lacks a capability
+instead of silently omitting tools or fabricating an answer.
 
 ---
 
@@ -504,24 +513,30 @@ The Kubernetes API should never be exposed to NextChat.
 
 ## 10. Configuration
 
-Configuration should use strongly typed .NET options.
+Configuration should use strongly typed .NET options, bound from a single root section so the whole thing can
+later be reloaded as a unit from a mounted Kubernetes ConfigMap. It lives in its own `agentconfig.yaml` file
+(loaded via a YAML config provider, `optional: true`/`reloadOnChange: true`), not `appsettings.json` — easier to
+hand-author and mount as a ConfigMap independently of the rest of ASP.NET Core's config.
 
 Required configuration:
 
 ```text
-OpenRouter:
-  Endpoint
-  Model
-  ApiKey
-
-KubernetesMcp:
-  Endpoint
-
 Agent:
   ModelId
   SystemPrompt
   MaxToolCalls (optional)
+  ModelConnection:
+    Endpoint
+    Model
+    ApiKey
+  McpServers:
+    - Name
+      Endpoint
 ```
+
+`McpServers` is a list — zero or more entries, each independently connected to (§7.4); an entry needs a
+non-empty, unique `Name` or the agent fails to start (a structural config mistake), but an unreachable `Endpoint`
+degrades gracefully rather than failing startup.
 
 Optional:
 
@@ -533,7 +548,8 @@ Agent:
   MaxConversationMessages
 ```
 
-The exact authentication properties must follow OpenRouter's Bearer-token authentication mechanism.
+The exact authentication properties for `ModelConnection` must follow OpenRouter's Bearer-token authentication
+mechanism.
 
 ---
 
@@ -577,7 +593,7 @@ Recommended semantics:
 - Liveness: process is running.
 - Readiness: application is initialized and required configuration is valid.
 
-Do not make readiness depend on OpenRouter being reachable unless there is a specific reason to do so.
+Do not make readiness depend on the model provider being reachable unless there is a specific reason to do so.
 
 ### Logging
 
@@ -825,25 +841,27 @@ src/
 ├── KubernetesAiAgent.Agent/
 │   ├── Program.cs
 │   ├── Agent/
-│   │   ├── KubernetesAgent.cs           # chat completions come from Microsoft.Agents.AI.Hosting.OpenAI, see §6.3
+│   │   ├── KubernetesAgentFactory.cs    # composes chat client + MCP tools into the AIAgent, see §6.3, §7.4
 │   │   └── AgentInstructions.cs
 │   ├── Api/
 │   │   ├── ModelsEndpoint.cs
 │   │   └── OpenAiModels.cs
 │   ├── Configuration/
-│   │   ├── OpenRouterOptions.cs
-│   │   ├── KubernetesMcpOptions.cs
-│   │   └── AgentOptions.cs
+│   │   ├── AgentOptions.cs              # single config root, see §10
+│   │   ├── ModelConnectionOptions.cs
+│   │   └── McpServerOptions.cs
 │   ├── Health/
+│   ├── agentconfig.yaml                 # checked in, no secrets — see §10
+│   ├── agentconfig.Development.yaml
+│   ├── appsettings.json                 # ASP.NET Core boilerplate only (Logging, AllowedHosts)
+│   ├── appsettings.Development.json
 │   └── Dockerfile
 │
 ├── KubernetesAiAgent.Tests/
 │   ├── Api/
-│   ├── Agent/
+│   ├── Configuration/
 │   └── Integration/
 │
-├── appsettings.json
-├── appsettings.Development.json
 ├── .gitignore
 └── README.md
 k8s/

@@ -1,0 +1,6 @@
+Agent:
+  McpServers:
+    - Name: k8s-mcp
+      Endpoint: http://localhost:8080/mcp
+    - Name: prometheus-mcp
+      Endpoint: http://localhost:8090/mcp
