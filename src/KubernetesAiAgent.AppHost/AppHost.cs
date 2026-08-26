@@ -24,4 +24,14 @@ builder.AddContainer("nextchat", "yidadaa/chatgpt-next-web", "v2.16.1")
     .WithReference(agent)
     .WaitFor(agent);
 
+// Custom AG-UI frontend (src/webui): a Vite/React SPA that speaks the AG-UI protocol directly to the Agent's
+// /agui endpoint from browser JavaScript — no Node-side proxy — so it can render agent messages and every MCP
+// tool call as they stream. Unlike NextChat this *does* exercise the Agent's CORS policy (which allows any
+// origin). WithHttpEndpoint's env: "PORT" is what vite.config.ts reads to bind the port Aspire allocated.
+builder.AddNpmApp("webui", "../webui", "dev")
+    .WithHttpEndpoint(env: "PORT")
+    .WithEnvironment("VITE_AGENT_URL", agent.GetEndpoint("http"))
+    .WithReference(agent)
+    .WaitFor(agent);
+
 builder.Build().Run();

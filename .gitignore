@@ -482,3 +482,8 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Node / Vite frontend (src/webui)
+node_modules/
+dist/
+*.tsbuildinfo

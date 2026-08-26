@@ -29,6 +29,7 @@
                               │                             │
                               │ /v1/models                  │
                               │ /v1/chat/completions        │
+                              │ /agui                       │
                               └──────────┬───────────┬──────┘
                                          │           │
                                          │           │ MCP
@@ -49,6 +50,10 @@
                               └─────────────────────────────┘
 ```
 
+A second, browser-direct frontend also exists alongside NextChat: a custom AG-UI web UI (`src/webui`) that
+connects straight from the browser to the agent's `/agui` endpoint rather than through a server-side proxy
+(§3.4). It is not shown in the diagram above to keep the primary request flow readable — see §3.4 and §5.4.
+
 ### 1.1 Aspire architecture
 
 The Aspire AppHost is responsible for composing the application resources.
@@ -58,13 +63,15 @@ Conceptually:
 ```text
 AppHost
 ├── NextChat container
+├── webui (npm/Vite app, src/webui) — custom AG-UI frontend, see §3.4
 ├── Kubernetes Agent project
 └── optional supporting resources
 ```
 
-The AppHost should configure service discovery between NextChat and the agent where supported — specifically,
-NextChat's `BASE_URL` environment variable should be wired to the agent's actual endpoint by the AppHost, not
-typed manually into a UI (see §3.3).
+The AppHost should configure service discovery between each frontend and the agent where supported —
+specifically, NextChat's `BASE_URL` environment variable and the webui's `VITE_AGENT_URL` environment variable
+should both be wired to the agent's actual endpoint by the AppHost, not typed manually into a UI or hard-coded
+into frontend source (see §3.3, §3.4).
 
 The Kubernetes MCP server is an externally configured dependency from the Aspire application's perspective. It may run inside the same Kubernetes cluster but is not owned by the Aspire application.
 
@@ -79,8 +86,10 @@ The Kubernetes MCP server is an externally configured dependency from the Aspire
 - Define the application topology.
 - Start the agent backend.
 - Start NextChat as a container.
-- Configure environment variables and references — including wiring NextChat's `BASE_URL` to the agent's endpoint,
-  so no manual configuration step is needed after starting the app (§3.3).
+- Start the custom AG-UI webui as an npm/Vite app resource (§3.4).
+- Configure environment variables and references — including wiring NextChat's `BASE_URL` and the webui's
+  `VITE_AGENT_URL` to the agent's endpoint, so no manual configuration step is needed after starting the app
+  (§3.3, §3.4).
 - Provide service discovery where applicable.
 - Provide a convenient local development experience.
 - Make the resource topology visible in the Aspire dashboard.
@@ -176,6 +185,40 @@ This means a developer runs the AppHost and gets a working, pre-configured chat 
 > NextChat's environment-variable-driven `BASE_URL` (above) removes that manual step entirely. Design principle 5
 > (§20) — the frontend remains replaceable — is what made this swap low-cost; a future frontend swap should stay
 > similarly cheap.
+
+### 3.4 Custom AG-UI frontend (`src/webui`)
+
+Alongside NextChat, a second frontend lives in `src/webui`: a small Vite + React + TypeScript single-page app
+built on [assistant-ui](https://www.assistant-ui.com/) that speaks the AG-UI protocol (§5.4) directly rather
+than OpenAI chat completions. Its purpose is to make the agent's tool calls visible — every MCP tool call
+(name, arguments, result) renders inline as its own card as it streams, alongside the agent's text — which
+NextChat's OpenAI-chat-completions view does not surface.
+
+Unlike NextChat, this frontend calls the agent **directly from browser JavaScript**:
+
+```text
+Browser -> webui (browser-side AG-UI client) -> Kubernetes Agent (/agui)
+```
+
+This is the one frontend that actually exercises the agent's CORS policy (§3.1, §9.2) — the policy allows any
+origin because no credentials are sent cross-origin, which is what makes a browser-direct frontend safe without
+further changes.
+
+Implementation notes:
+
+- The AG-UI client (`@ag-ui/client`'s `HttpAgent`) is wired into assistant-ui's React runtime via
+  `@assistant-ui/react-ag-ui`'s `useAgUiRuntime`, with `agent` as the only required option.
+- The agent's endpoint is read from a `VITE_AGENT_URL` build/runtime environment variable, wired by the AppHost
+  (§1.1, §2.1) to the agent's actual endpoint — never hard-coded, per §20 design principle 7.
+- Tool calls are always executed automatically; there is no approval/interrupt step. Tool-call rendering is
+  registered once as a catch-all fallback (`tools: { Fallback: ToolCall }`) rather than per tool name, since the
+  set of MCP tools is server-side configuration (`agentconfig.yaml`, §7) unknown to the frontend at build time.
+- Runs entirely without a Node-side runtime process or proxy (no `@copilotkit/runtime`-style server, no
+  Next.js) — the AppHost starts it as a plain `npm run dev` Vite app resource. This keeps the agent backend the
+  only server-side component in the request path, consistent with §20 design principle 8 (stateless backend);
+  the browser itself owns the AG-UI run/thread state for its session.
+- Conversation history lives in the browser tab's memory only (no persistence across reloads) — an acceptable
+  gap for what is currently a debugging/inspection surface rather than NextChat's primary end-user chat UI.
 
 ---
 
@@ -284,6 +327,44 @@ handling.
 > not in this app's own code (which does not hand-roll the SSE mapping — see §6.3). No newer prerelease exists yet
 > to pick up a fix. Whether NextChat's more mature streaming client tolerates this better than Hollama's did is not
 > yet verified — re-test against NextChat before assuming it's resolved.
+
+### 5.4 AG-UI protocol
+
+```http
+POST /agui
+```
+
+In addition to the OpenAI-compatible surface above, the agent exposes the same underlying `AIAgent` over
+[AG-UI](https://ag-ui.com), an event-streamed protocol purpose-built for agent frontends: it carries structured
+run/message/tool-call/state events rather than an OpenAI-shaped chat completion. This is purely additive — it
+does not change `/v1/chat/completions` or NextChat's integration (§3.1, §5.2).
+
+Mapped via `Microsoft.Agents.AI.Hosting.AGUI.AspNetCore`'s `MapAGUIServer("/agui", agent)`, which takes the
+`AIAgent` directly and provides no additional configuration hook. A `POST` to `/agui` with an AG-UI
+`RunAgentInput` (thread id, run id, message history, optionally client-declared tools) streams back
+Server-Sent Events, at minimum:
+
+```text
+RUN_STARTED
+TEXT_MESSAGE_START / TEXT_MESSAGE_CONTENT / TEXT_MESSAGE_END
+TOOL_CALL_START / TOOL_CALL_ARGS / TOOL_CALL_END / TOOL_CALL_RESULT
+RUN_FINISHED (outcome: { type: "success" } or { type: "interrupt", interrupts: [...] })
+```
+
+The `src/webui` frontend (§3.4) is the one consumer of this endpoint; NextChat continues to use
+`/v1/chat/completions` only.
+
+**Statelessness:** `MapAGUIServer` falls back to a no-op session store when none is registered, which is the
+case here — no thread/conversation state is persisted server-side. The client resends the full message history
+on each run, consistent with §11 and §20 design principle 8. This also means AG-UI's `threadId` carries no
+authorization semantics in this deployment (it is not a security boundary) — acceptable because there is no
+per-user persisted state to protect; revisit if a persistent session store is ever added for multi-user use.
+
+**Tool execution:** tools always execute automatically; there is no human-in-the-loop approval step for tool
+calls over this endpoint (§20 design principle 3 — read-only access, not an approval workflow, is the safety
+boundary regardless). The underlying packages (`ApprovalRequiredAIFunction`, AG-UI's interrupt/`resume`
+mechanism) do support a manual-approval flow if a future version needs one, but nothing in the current agent
+opts into it.
 
 ---
 
@@ -861,6 +942,15 @@ src/
 │   ├── Api/
 │   ├── Configuration/
 │   └── Integration/
+│
+├── webui/                                # custom AG-UI frontend, see §3.4 — Vite + React + TypeScript
+│   ├── src/
+│   │   ├── agent.ts                      # HttpAgent -> `${VITE_AGENT_URL}/agui`
+│   │   ├── App.tsx                       # useAgUiRuntime + AssistantRuntimeProvider
+│   │   ├── Thread.tsx                    # transcript + composer
+│   │   └── ToolCall.tsx                  # catch-all tool-call renderer
+│   ├── package.json
+│   └── vite.config.ts
 │
 ├── .gitignore
 └── README.md

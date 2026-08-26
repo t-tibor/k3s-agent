@@ -2,6 +2,7 @@ using KubernetesAiAgent.Agent.Agent;
 using KubernetesAiAgent.Agent.Api;
 using KubernetesAiAgent.Agent.Configuration;
 using KubernetesAiAgent.Agent.Health;
+using Microsoft.Agents.AI.Hosting.AGUI.AspNetCore;
 
 const string FrontendCorsPolicy = "Frontend";
 
@@ -29,14 +30,17 @@ builder.Services.AddOptions<AgentOptions>()
     .ValidateOnStart();
 
 builder.Services.AddSingleton<KubernetesAgentFactory>();
+builder.Services.AddAGUIServer();
 
 builder.Services.AddHealthChecks()
     .AddCheck<AgentConfigurationHealthCheck>("agent-configuration")
     .AddCheck<ModelConnectionConfigurationHealthCheck>("model-connection-configuration");
 
-// Hollama (and any other browser-based frontend) calls this API directly from client-side JavaScript rather than
-// through a server-side proxy (docs/ARCHITECTURE.md §3.2). No credentials are sent cross-origin by this API, so
-// allowing any origin is safe.
+// The custom AG-UI frontend (src/webui) calls this API directly from client-side JavaScript rather than through
+// a server-side proxy (docs/ARCHITECTURE.md §3.2) — unlike NextChat, which calls it from its own Node process.
+// No credentials are sent cross-origin by this API, so allowing any origin is safe. Note that AllowAnyOrigin is
+// incompatible with AllowCredentials: a frontend that ever needs cookies or auth headers cross-origin would have
+// to switch this to WithOrigins(...).AllowCredentials().
 builder.Services.AddCors(corsOptions => corsOptions.AddPolicy(FrontendCorsPolicy, policy =>
 {
     policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
@@ -57,13 +61,18 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-// No forced HTTPS redirect: in local dev, Hollama is pointed at this API's HTTP endpoint to avoid the browser
+// No forced HTTPS redirect: in local dev, frontends are pointed at this API's HTTP endpoint to avoid the browser
 // rejecting the ASP.NET Core dev-cert (docs/ARCHITECTURE.md §3.2) — redirecting would break that.
 
 app.UseCors(FrontendCorsPolicy);
 
 app.MapModelsEndpoint();
 app.MapOpenAIChatCompletions(kubernetesAgent, path: "/v1/chat/completions", KubernetesAgentFactory.ChatCompletionsMapOptions);
+
+// AG-UI (https://ag-ui.com) endpoint for frontends that speak the protocol natively (event-streamed run/state
+// updates) rather than OpenAI chat completions — exposes the same underlying AIAgent, just via a different
+// wire protocol. Purely additive: doesn't change /v1/chat/completions or its NextChat integration.
+app.MapAGUIServer("/agui", kubernetesAgent);
 
 app.Run();
 
