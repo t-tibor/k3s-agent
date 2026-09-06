@@ -1,6 +1,6 @@
-# ClusterIP only (docs/ARCHITECTURE.md §9.2 for the equivalent NextChat/agent boundary reasoning); reach
-# it via `kubectl port-forward` for local browser access, or a future Ingress if you decide to add one —
-# see k8s/README.md.
+# ClusterIP only (docs/ARCHITECTURE.md §9.2); reach it via `kubectl port-forward` for local browser access,
+# or a future Ingress if you decide to add one — see k8s/README.md. Serves both the webui SPA and the
+# /agui API (§3.4) — there is no separate webui Service.
 apiVersion: v1
 kind: Service
 metadata:
@@ -14,5 +14,5 @@ spec:
     app: kubernetes-agent
   ports:
     - name: http
-      port: 5192
+      port: 8080
       targetPort: http

@@ -1,0 +1,6 @@
+# Context for dotnet/KubernetesAiAgent.NetAgent/Dockerfile — keeps stale local build output and installed
+# packages out of the image build context.
+**/bin/
+**/obj/
+**/node_modules/
+**/dist/

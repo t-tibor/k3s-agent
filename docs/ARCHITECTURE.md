@@ -50,9 +50,11 @@
                               └─────────────────────────────┘
 ```
 
-A second, browser-direct frontend also exists alongside NextChat: a custom AG-UI web UI (`src/frontend`) that
-connects straight from the browser to the agent's `/agui` endpoint rather than through a server-side proxy
-(§3.4). It is not shown in the diagram above to keep the primary request flow readable — see §3.4 and §5.4.
+A second, browser-direct frontend also exists alongside NextChat: a custom AG-UI web UI
+(`dotnet/KubernetesAiAgent.WebUI`) that connects straight from the browser to the agent's `/agui` endpoint
+rather than through a server-side proxy in local dev (§3.4). It is not shown in the diagram above to keep
+the primary request flow readable — see §3.4 and §5.4. In production, this frontend is instead built and
+served by the agent itself from the same origin (§3.4, §16, §17) — no separate frontend process/pod there.
 
 ### 1.1 Aspire architecture
 
@@ -63,7 +65,7 @@ Conceptually:
 ```text
 AppHost
 ├── NextChat container
-├── webui (npm/Vite app, src/frontend) — custom AG-UI frontend, see §3.4
+├── webui (npm/Vite app, dotnet/KubernetesAiAgent.WebUI) — custom AG-UI frontend, see §3.4
 ├── Kubernetes Agent project
 └── optional supporting resources
 ```
@@ -142,9 +144,11 @@ The only backend integration required for V1 is:
 Browser -> NextChat (server-side proxy) -> Kubernetes Agent
 ```
 
-Because the call to the Agent happens server-side rather than from browser JavaScript, the Agent's CORS policy
-(which allows any origin — no credentials are sent cross-origin by this API) is not exercised by this default
-frontend — it remains available, unused, for any future browser-direct frontend (§20 design principle 5).
+Because the call to the Agent happens server-side rather than from browser JavaScript, NextChat never needs
+the Agent to grant it cross-origin access. The Agent doesn't run a CORS policy at all — the other frontend,
+`dotnet/KubernetesAiAgent.WebUI` (§3.4), also never calls it cross-origin (a dev-server proxy or, in
+production, same-origin serving stands in for what a CORS policy would otherwise have to allow), so nothing
+in this system needs one (§20 design principle 5).
 
 ### 3.2 Container requirements
 
@@ -186,37 +190,45 @@ This means a developer runs the AppHost and gets a working, pre-configured chat 
 > (§20) — the frontend remains replaceable — is what made this swap low-cost; a future frontend swap should stay
 > similarly cheap.
 
-### 3.4 Custom AG-UI frontend (`src/frontend`)
+### 3.4 Custom AG-UI frontend (`dotnet/KubernetesAiAgent.WebUI`)
 
-Alongside NextChat, a second frontend lives in `src/frontend`: a small Vite + React + TypeScript single-page app
-built on [assistant-ui](https://www.assistant-ui.com/) that speaks the AG-UI protocol (§5.4) directly rather
-than OpenAI chat completions. Its purpose is to make the agent's tool calls visible — every MCP tool call
-(name, arguments, result) renders inline as its own card as it streams, alongside the agent's text — which
-NextChat's OpenAI-chat-completions view does not surface.
+Alongside NextChat, a second frontend lives in `dotnet/KubernetesAiAgent.WebUI`: a small Vite + React +
+TypeScript single-page app built on [assistant-ui](https://www.assistant-ui.com/) that speaks the AG-UI
+protocol (§5.4) directly rather than OpenAI chat completions. Its purpose is to make the agent's tool calls
+visible — every MCP tool call (name, arguments, result) renders inline as its own card as it streams,
+alongside the agent's text — which NextChat's OpenAI-chat-completions view does not surface.
 
-Unlike NextChat, this frontend calls the agent **directly from browser JavaScript**:
+Unlike NextChat, this frontend calls the agent **directly from browser JavaScript**, but always at a
+same-origin relative path:
 
 ```text
-Browser -> webui (browser-side AG-UI client) -> Kubernetes Agent (/agui)
+Browser -> webui (browser-side AG-UI client, same-origin "/agui") -> Kubernetes Agent
 ```
 
-This is the one frontend that actually exercises the agent's CORS policy (§3.1, §9.2) — the policy allows any
-origin because no credentials are sent cross-origin, which is what makes a browser-direct frontend safe without
-further changes.
+The agent needs no CORS policy for this frontend in either environment: in local Aspire dev, Vite's own
+dev-server proxy (`vite.config.ts`) forwards `/agui` to the agent's real endpoint server-side; in the
+production deployment, NetAgent builds and serves this frontend itself from the same origin (§16, §17). The
+browser itself never makes a cross-origin request either way.
 
 Implementation notes:
 
 - The AG-UI client (`@ag-ui/client`'s `HttpAgent`) is wired into assistant-ui's React runtime via
   `@assistant-ui/react-ag-ui`'s `useAgUiRuntime`, with `agent` as the only required option.
-- The agent's endpoint is read from a `VITE_AGENT_URL` build/runtime environment variable, wired by the AppHost
-  (§1.1, §2.1) to the agent's actual endpoint — never hard-coded, per §20 design principle 7.
+- `src/agent.ts` constructs `HttpAgent` with a hard-coded relative `url: "/agui"` — no environment-specific
+  URL is ever baked into the client bundle. The `VITE_AGENT_URL` environment variable does still exist,
+  wired by the AppHost (§1.1, §2.1) to the agent's actual endpoint, but it's consumed only by
+  `vite.config.ts`'s dev-server proxy configuration (Node-side code, never exposed to the client bundle) as
+  the proxy target — never hard-coded, per §20 design principle 7.
 - Tool calls are always executed automatically; there is no approval/interrupt step. Tool-call rendering is
   registered once as a catch-all fallback (`tools: { Fallback: ToolCall }`) rather than per tool name, since the
   set of MCP tools is server-side configuration (`agentconfig.yaml`, §7) unknown to the frontend at build time.
-- Runs entirely without a Node-side runtime process or proxy (no `@copilotkit/runtime`-style server, no
-  Next.js) — the AppHost starts it as a plain `npm run dev` Vite app resource. This keeps the agent backend the
-  only server-side component in the request path, consistent with §20 design principle 8 (stateless backend);
-  the browser itself owns the AG-UI run/thread state for its session.
+- In local Aspire dev, this runs as a plain `npm run dev` Vite app resource — its dev-server's built-in
+  proxying (`vite.config.ts`'s `server.proxy`) is what forwards `/agui`, not a hand-rolled application
+  server (no `@copilotkit/runtime`-style server, no Next.js), so the agent backend remains the only
+  component with real request-handling logic, consistent with §20 design principle 8 (stateless backend).
+  In production, the frontend is instead compiled ahead of time into static files by NetAgent's own
+  `.csproj` (an MSBuild target that runs at `dotnet publish`, not at request time — see §17) and served by
+  the agent process itself. The browser itself owns the AG-UI run/thread state for its session either way.
 - Conversation history lives in the browser tab's memory only (no persistence across reloads) — an acceptable
   gap for what is currently a debugging/inspection surface rather than NextChat's primary end-user chat UI.
 
@@ -351,7 +363,7 @@ TOOL_CALL_START / TOOL_CALL_ARGS / TOOL_CALL_END / TOOL_CALL_RESULT
 RUN_FINISHED (outcome: { type: "success" } or { type: "interrupt", interrupts: [...] })
 ```
 
-The `src/frontend` frontend (§3.4) is the one consumer of this endpoint; NextChat continues to use
+The `dotnet/KubernetesAiAgent.WebUI` frontend (§3.4) is the one consumer of this endpoint; NextChat continues to use
 `/v1/chat/completions` only.
 
 **Statelessness:** `MapAGUIServer` falls back to a no-op session store when none is registered, which is the
@@ -844,6 +856,11 @@ kubernetes-mcp
 NextChat needs no `PersistentVolumeClaim` — conversation history is browser-side, and its own configuration comes
 from environment variables/its Deployment spec, not from persisted server-side state.
 
+The actual `k8s/` manifests in this repo deploy only `kubernetes-agent` (no NextChat) — its container is
+built from `dotnet/KubernetesAiAgent.NetAgent/Dockerfile`, which also builds and serves the
+`KubernetesAiAgent.WebUI` frontend from the same Deployment/Service, so there's no separate `webui`
+Deployment/Service (§3.4, §17).
+
 The agent should communicate with the MCP server using its internal Kubernetes DNS name.
 
 Example:
@@ -869,6 +886,14 @@ Requirements:
 - No secrets baked into the image.
 - Configurable listening port.
 - Health endpoint available to Kubernetes probes.
+
+`dotnet/KubernetesAiAgent.NetAgent/Dockerfile` builds this image with `dotnet/` (its parent directory) as
+context, since its `.csproj` also builds the sibling `KubernetesAiAgent.WebUI` project as part of `dotnet
+publish` (an MSBuild target that runs `npm ci`/`npm run build` and folds the SPA's `dist` output into
+`wwwroot` — the same mechanism the classic ASP.NET Core + React template uses) and folds it into the same
+published output, so one image serves both the API and the frontend (§3.4, §16). The SDK build stage
+installs Node.js itself (the base SDK image has none) purely to run that publish-time build; the runtime
+stage never needs Node.
 
 NextChat should use a pinned image version rather than an unqualified `latest` tag in production.
 
@@ -914,55 +939,52 @@ Use automated HTTP tests for the OpenAI-compatible endpoints.
 ## 19. Project structure
 
 ```text
-appHost/
-└── KubernetesAiAgent.AppHost/
-    └── AppHost.cs
 docs/
 ├── PRD.md
 └── ARCHITECTURE.md
-src/
-├── backend/
-│   ├── dotnet/
-│   │   ├── KubernetesAiAgent.NetAgent/    # .NET implementation — OpenAI chat-completions + AG-UI
-│   │   │   ├── Program.cs
-│   │   │   ├── Agent/
-│   │   │   │   ├── KubernetesAgentFactory.cs  # composes chat client + MCP tools into the AIAgent, see §6.3, §7.4
-│   │   │   │   └── AgentInstructions.cs
-│   │   │   ├── Api/
-│   │   │   │   ├── ModelsEndpoint.cs
-│   │   │   │   └── OpenAiModels.cs
-│   │   │   ├── Configuration/
-│   │   │   │   ├── AgentOptions.cs      # single config root, see §10
-│   │   │   │   ├── ModelConnectionOptions.cs
-│   │   │   │   └── McpServerOptions.cs
-│   │   │   ├── Health/
-│   │   │   ├── agentconfig.yaml         # checked in, no secrets — see §10
-│   │   │   ├── agentconfig.Development.yaml
-│   │   │   ├── appsettings.json         # ASP.NET Core boilerplate only (Logging, AllowedHosts)
-│   │   │   └── appsettings.Development.json
-│   │   └── KubernetesAiAgent.ServiceDefaults/  # shared Aspire wiring: OpenTelemetry, service discovery, health checks
-│   └── python/
-│       └── KubernetesAiAgent.PyAgent/     # Python port on Microsoft Agent Framework, uv-managed — AG-UI only
-│           ├── main.py                  # entrypoint: uvicorn on $PORT
-│           ├── pyproject.toml / uv.lock
-│           ├── kubernetes_agent/
-│           │   ├── app.py               # FastAPI app factory + lifespan, see note below
-│           │   ├── agent_factory.py     # composes chat client + MCP tools, mirrors KubernetesAgentFactory.cs
-│           │   ├── config.py            # pydantic-settings mirror of AgentOptions.cs et al.
-│           │   ├── health.py
-│           │   ├── telemetry.py
-│           │   └── instructions.py
-│           ├── agentconfig.yaml         # same keys/shape as NetAgent's — see §10, §21
-│           └── agentconfig.Development.yaml
-│
-└── frontend/                              # custom AG-UI frontend, see §3.4 — Vite + React + TypeScript
+dotnet/
+├── KubernetesAiAgent.AppHost/
+│   └── AppHost.cs
+├── KubernetesAiAgent.NetAgent/         # .NET implementation — OpenAI chat-completions + AG-UI + (production) webui
+│   ├── Program.cs
+│   ├── Dockerfile                    # single image: builds + serves KubernetesAiAgent.WebUI too, see §17
+│   ├── Agent/
+│   │   ├── KubernetesAgentFactory.cs  # composes chat client + MCP tools into the AIAgent, see §6.3, §7.4
+│   │   └── AgentInstructions.cs
+│   ├── Api/
+│   │   ├── ModelsEndpoint.cs
+│   │   └── OpenAiModels.cs
+│   ├── Configuration/
+│   │   ├── AgentOptions.cs      # single config root, see §10
+│   │   ├── ModelConnectionOptions.cs
+│   │   └── McpServerOptions.cs
+│   ├── Health/
+│   ├── agentconfig.yaml         # checked in, no secrets — see §10
+│   ├── agentconfig.Development.yaml
+│   ├── appsettings.json         # ASP.NET Core boilerplate only (Logging, AllowedHosts)
+│   └── appsettings.Development.json
+├── KubernetesAiAgent.ServiceDefaults/  # shared Aspire wiring: OpenTelemetry, service discovery, health checks
+└── KubernetesAiAgent.WebUI/            # custom AG-UI frontend, see §3.4 — Vite + React + TypeScript
     ├── src/
-    │   ├── agent.ts                       # HttpAgent -> `${VITE_AGENT_URL}/agui`
-    │   ├── App.tsx                        # useAgUiRuntime + AssistantRuntimeProvider
-    │   ├── Thread.tsx                     # transcript + composer
-    │   └── ToolCall.tsx                   # catch-all tool-call renderer
+    │   ├── agent.ts                    # HttpAgent -> `${VITE_AGENT_URL}/agui` (relative when unset)
+    │   ├── App.tsx                     # useAgUiRuntime + AssistantRuntimeProvider
+    │   ├── Thread.tsx                  # transcript + composer
+    │   └── ToolCall.tsx                # catch-all tool-call renderer
     ├── package.json
     └── vite.config.ts
+python/
+└── KubernetesAiAgent.PyAgent/     # Python port on Microsoft Agent Framework, uv-managed — AG-UI only
+    ├── main.py                  # entrypoint: uvicorn on $PORT
+    ├── pyproject.toml / uv.lock
+    ├── kubernetes_agent/
+    │   ├── app.py               # FastAPI app factory + lifespan, see note below
+    │   ├── agent_factory.py     # composes chat client + MCP tools, mirrors KubernetesAgentFactory.cs
+    │   ├── config.py            # pydantic-settings mirror of AgentOptions.cs et al.
+    │   ├── health.py
+    │   ├── telemetry.py
+    │   └── instructions.py
+    ├── agentconfig.yaml         # same keys/shape as NetAgent's — see §10, §21
+    └── agentconfig.Development.yaml
 tests/
 ├── dotnet/
 │   └── KubernetesAiAgent.Tests/           # xUnit, tests NetAgent only
@@ -982,7 +1004,7 @@ server-side hosting extension equivalent to .NET's `Microsoft.Agents.AI.Hosting.
 (`agent_framework_ag_ui.add_agent_framework_fastapi_endpoint`, see §5.3, §6.3, §7.4 for the .NET
 equivalents this mirrors) exists as of this writing. PyAgent therefore exposes `/agui`, `/health`, and
 `/alive`, but not `/v1/chat/completions` or `GET /v1/models` — NextChat (§3.2, §18.3) cannot be pointed at
-it; only the custom AG-UI frontend (`src/frontend`) can. If a Python OpenAI-compatible hosting extension is
+it; only the custom AG-UI frontend (`dotnet/KubernetesAiAgent.WebUI`) can. If a Python OpenAI-compatible hosting extension is
 released later, `KubernetesAiAgent.NetAgent`'s API contract (§5) is the target to match.
 
 ---

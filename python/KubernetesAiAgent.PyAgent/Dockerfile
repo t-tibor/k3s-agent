@@ -2,9 +2,11 @@
 # requirements were written for the .NET agent but apply equally here: multi-stage, non-root, minimal
 # runtime image, no secrets baked in, configurable port, health surface reachable by k8s probes).
 #
-# Build from the repo root so the build context can reach uv.lock/pyproject.toml/app code:
-#   docker build -f src/backend/python/KubernetesAiAgent.PyAgent/Dockerfile -t k3s-agent/kubernetes-agent:latest \
-#     src/backend/python/KubernetesAiAgent.PyAgent
+# Build with this project's own directory as context so it can reach uv.lock/pyproject.toml/app code:
+#   docker build -f python/KubernetesAiAgent.PyAgent/Dockerfile -t k3s-agent/pyagent:latest \
+#     python/KubernetesAiAgent.PyAgent
+#
+# Standalone image only — not part of the k8s/ deployment (see k8s/README.md, CLAUDE.md "Which agent runs").
 
 FROM python:3.12-slim AS build
 

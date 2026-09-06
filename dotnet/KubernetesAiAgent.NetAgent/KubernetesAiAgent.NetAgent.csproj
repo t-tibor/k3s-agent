@@ -1,0 +1,57 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>4dd00433-4ceb-48f6-846b-8aa2e5650f47</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Agents.AI.Hosting.AGUI.AspNetCore" Version="1.19.0-preview.260822.1" />
+    <PackageReference Include="Microsoft.Agents.AI.Hosting.OpenAI" Version="1.19.0-alpha.260822.1" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.9.0" />
+    <PackageReference Include="ModelContextProtocol" Version="2.2.0" />
+    <PackageReference Include="NetEscapades.Configuration.Yaml" Version="3.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\KubernetesAiAgent.ServiceDefaults\KubernetesAiAgent.ServiceDefaults.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="agentconfig.yaml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="agentconfig.Development.yaml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <!-- Builds the sibling KubernetesAiAgent.WebUI (Vite/React) project and folds its output into this
+       project's wwwroot, the same mechanism the classic ASP.NET Core + React template uses — except Vite
+       writes to "dist" rather than "build", and the SPA lives in a sibling project directory rather than
+       nested under this one. Runs only on `dotnet publish` (what the Dockerfile and CI use via
+       AfterTargets="ComputeFilesToPublish"), not on plain `dotnet build`/`dotnet run`, so local Aspire dev
+       stays fast and keeps using the Vite dev server (see AppHost.cs) instead of rebuilding the SPA on
+       every iteration. src/agent.ts always calls a same-origin relative "/agui" — no build-time env var
+       needed here, since this published bundle is served by this same app (see Program.cs). -->
+  <PropertyGroup>
+    <SpaRoot>..\KubernetesAiAgent.WebUI\</SpaRoot>
+  </PropertyGroup>
+
+  <Target Name="PublishWebUI" AfterTargets="ComputeFilesToPublish">
+    <Exec WorkingDirectory="$(SpaRoot)" Command="npm ci" />
+    <Exec WorkingDirectory="$(SpaRoot)" Command="npm run build" />
+    <ItemGroup>
+      <DistFiles Include="$(SpaRoot)dist\**" />
+      <ResolvedFileToPublish Include="@(DistFiles->'%(FullPath)')" Exclude="@(ResolvedFileToPublish)">
+        <RelativePath>wwwroot\%(RecursiveDir)%(FileName)%(Extension)</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
+
+</Project>

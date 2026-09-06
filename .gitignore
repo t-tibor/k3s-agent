@@ -483,12 +483,12 @@ $RECYCLE.BIN/
 # Vim temporary swap files
 *.swp
 
-# Node / Vite frontend (src/frontend)
+# Node / Vite frontend (dotnet/KubernetesAiAgent.WebUI)
 node_modules/
 dist/
 *.tsbuildinfo
 
-# Python (src/backend/python/KubernetesAiAgent.PyAgent)
+# Python (python/KubernetesAiAgent.PyAgent)
 __pycache__/
 *.py[cod]
 *$py.class

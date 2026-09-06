@@ -7,24 +7,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 global.json                                   # pins the .NET SDK (10.0.400)
 KubernetesAiAgent.sln
-appHost/
-└── KubernetesAiAgent.AppHost/                # Aspire orchestrator — starts PyAgent + the AG-UI frontend
+dotnet/
+├── KubernetesAiAgent.AppHost/                # Aspire orchestrator — starts NetAgent + the AG-UI frontend (dev)
+├── KubernetesAiAgent.NetAgent/                # ASP.NET Core agent backend (OpenAI chat-completions + AG-UI);
+│                                              #   also builds + serves KubernetesAiAgent.WebUI in production
+├── KubernetesAiAgent.ServiceDefaults/         # shared Aspire wiring: OpenTelemetry, service discovery, health checks
+└── KubernetesAiAgent.WebUI/                   # Vite/React AG-UI frontend
 docs/
 ├── PRD.md                                    # functional description + acceptance criteria
 └── ARCHITECTURE.md                           # component design, API contracts, config, security, project layout
-src/
-├── backend/
-│   ├── dotnet/
-│   │   ├── KubernetesAiAgent.NetAgent/       # ASP.NET Core agent backend (OpenAI chat-completions + AG-UI)
-│   │   └── KubernetesAiAgent.ServiceDefaults/# shared Aspire wiring: OpenTelemetry, service discovery, health checks
-│   └── python/
-│       └── KubernetesAiAgent.PyAgent/        # Python agent backend on Microsoft Agent Framework (AG-UI only), uv-managed
-└── frontend/                                 # Vite/React AG-UI frontend, talks to whichever agent the AppHost starts
+python/
+└── KubernetesAiAgent.PyAgent/                # Python agent backend on Microsoft Agent Framework (AG-UI only), uv-managed
 tests/
 ├── dotnet/
 │   └── KubernetesAiAgent.Tests/              # xUnit tests, references NetAgent
 └── python/                                   # pytest suite for PyAgent (discovered via its pyproject.toml testpaths)
-k8s/                                          # Kubernetes deployment manifests (placeholder, not yet populated)
+k8s/                                          # Kubernetes deployment manifests
 ```
 
 - `docs/PRD.md` — what the product must do (overview, goals, non-goals, example use cases) and acceptance criteria.
@@ -34,8 +32,8 @@ k8s/                                          # Kubernetes deployment manifests 
 Read both in full before implementing — the summary below is a map of their structure, not a replacement for them.
 
 There are **two parallel agent backends** implementing the same logic: `KubernetesAiAgent.NetAgent` (.NET,
-original) and `KubernetesAiAgent.PyAgent` (Python port, uv-managed). The Aspire AppHost currently starts only
-PyAgent — see "Which agent runs" below.
+original) and `KubernetesAiAgent.PyAgent` (Python port, uv-managed, under `python/`). The Aspire AppHost
+starts NetAgent — see "Which agent runs" below.
 
 ## Commands
 
@@ -43,26 +41,29 @@ PyAgent — see "Which agent runs" below.
 dotnet build                                                                          # build the whole .NET solution
 dotnet test tests/dotnet/KubernetesAiAgent.Tests/KubernetesAiAgent.Tests.csproj       # run NetAgent's xUnit tests
 dotnet test tests/dotnet/KubernetesAiAgent.Tests/KubernetesAiAgent.Tests.csproj --filter "FullyQualifiedName~<Name>"  # single test
-dotnet run --project appHost/KubernetesAiAgent.AppHost                               # start the Aspire dashboard + PyAgent + webui locally
+dotnet run --project dotnet/KubernetesAiAgent.AppHost                               # start the Aspire dashboard + NetAgent + webui locally
+docker build -f dotnet/KubernetesAiAgent.NetAgent/Dockerfile -t k3s-agent/kubernetes-agent:latest dotnet  # production image: builds + serves the webui too
 
-cd src/backend/python/KubernetesAiAgent.PyAgent
+cd python/KubernetesAiAgent.PyAgent
 uv sync                                                                  # install/update the Python virtual environment
-uv run pytest                                                            # run PyAgent's pytest suite (from ../../../../tests/python)
+uv run pytest                                                            # run PyAgent's pytest suite (from ../../tests/python)
 uv run main.py                                                           # run PyAgent standalone (binds $PORT, default 5192)
 ```
 
-NetAgent exposes `/health`, `/alive`, `GET /v1/models`, `POST /v1/chat/completions`, and `/agui`. PyAgent
-exposes only `/health`, `/alive`, and `/agui` — Microsoft Agent Framework for Python has no server-side
-OpenAI chat-completions hosting extension yet, so there's no Python equivalent of `/v1/chat/completions` or
-`/v1/models`. Both are real Microsoft Agent Framework agents backed by OpenRouter (DeepSeek V4 Flash) with
-Kubernetes MCP tools wired in — see `src/backend/dotnet/KubernetesAiAgent.NetAgent/Agent/KubernetesAgentFactory.cs` and
-`src/backend/python/KubernetesAiAgent.PyAgent/kubernetes_agent/agent_factory.py`.
+NetAgent exposes `/health`, `/alive`, `GET /v1/models`, `POST /v1/chat/completions`, and `/agui`, and — only
+in the production Docker image, where its `.csproj` builds `KubernetesAiAgent.WebUI` at publish time and
+serves the result from `wwwroot` — the webui SPA itself. PyAgent exposes only `/health`, `/alive`, and
+`/agui` — Microsoft Agent Framework for Python has no server-side OpenAI chat-completions hosting extension
+yet, so there's no Python equivalent of `/v1/chat/completions` or `/v1/models`. Both are real Microsoft
+Agent Framework agents backed by OpenRouter (DeepSeek V4 Flash) with Kubernetes MCP tools wired in — see
+`dotnet/KubernetesAiAgent.NetAgent/Agent/KubernetesAgentFactory.cs` and
+`python/KubernetesAiAgent.PyAgent/kubernetes_agent/agent_factory.py`.
 
 Local dev needs an OpenRouter key. For NetAgent standalone:
-`dotnet user-secrets set "Agent:ModelConnection:ApiKey" "<key>" --project src/backend/dotnet/KubernetesAiAgent.NetAgent`.
+`dotnet user-secrets set "Agent:ModelConnection:ApiKey" "<key>" --project dotnet/KubernetesAiAgent.NetAgent`.
 For PyAgent standalone: `export Agent__ModelConnection__ApiKey="<key>"`. When running via the AppHost
-(which currently starts PyAgent), the key is an AppHost parameter instead:
-`dotnet user-secrets set "Parameters:openrouter-api-key" "<key>" --project appHost/KubernetesAiAgent.AppHost`.
+(which starts NetAgent), the key is an AppHost parameter instead:
+`dotnet user-secrets set "Parameters:openrouter-api-key" "<key>" --project dotnet/KubernetesAiAgent.AppHost`.
 
 ## What this project is
 
@@ -71,37 +72,47 @@ chat UI; the request flows through an agent backend into an LLM that can call re
 tools to answer with real cluster state.
 
 Component chain (see docs/ARCHITECTURE.md §1 for the full diagram; this reflects what the AppHost actually
-runs today — PyAgent, not NetAgent):
+runs today — NetAgent):
 
 ```
-Browser -> webui (AG-UI) -> Kubernetes AI Agent (PyAgent) -> Microsoft Agent Framework -> OpenRouter (DeepSeek V4 Flash)
+Browser -> webui (AG-UI) -> Kubernetes AI Agent (NetAgent) -> Microsoft Agent Framework -> OpenRouter (DeepSeek V4 Flash)
                                     |
                                     +--> Kubernetes MCP Server (read-only) -> Kubernetes API
 ```
 
-- **webui** (`src/frontend`) — Vite/React SPA speaking the AG-UI protocol directly to the agent's `/agui`
-  endpoint from browser JavaScript (no Node-side proxy), rendering agent messages and MCP tool calls as
-  they stream. `VITE_AGENT_URL` is wired by the AppHost to whichever agent it starts
-  (`agent.GetEndpoint("http")`). This does exercise the agent's CORS policy (allow-any-origin, no
-  credentials).
-- **NextChat** (`yidadaa/chatgpt-next-web`) — the OpenAI-compatible chat UI used with NetAgent. **Not**
-  started by the AppHost currently, since it only speaks chat-completions and PyAgent doesn't expose that
-  protocol. To use it, point it at a separately-run NetAgent instance.
+In production (the k8s/ Docker image), NetAgent also serves the webui's built static files from the same
+origin/pod — there's no separate webui process there. In local Aspire dev, the webui still runs as its own
+Vite dev server resource for hot reload, but its own dev-server proxy forwards `/agui` to the agent
+server-side, so the browser still only ever talks to one origin either way.
+
+- **webui** (`dotnet/KubernetesAiAgent.WebUI`) — Vite/React SPA speaking the AG-UI protocol. It always calls
+  a same-origin relative `/agui` (`src/agent.ts`) and renders agent messages and MCP tool calls as they
+  stream. In local Aspire dev, `VITE_AGENT_URL` is wired by the AppHost to the agent's endpoint
+  (`agent.GetEndpoint("http")`) and consumed only by `vite.config.ts`'s dev-server proxy (Node-side, not
+  exposed to client JS) to forward `/agui` there; in the production image, NetAgent builds and serves this
+  same bundle directly (see `dotnet/KubernetesAiAgent.NetAgent/Dockerfile` and its `.csproj`'s
+  `PublishWebUI` target). Neither path needs a CORS policy on the agent.
+- **NextChat** (`yidadaa/chatgpt-next-web`) — the OpenAI-compatible chat UI used with NetAgent. Not started
+  by the AppHost or deployed by `k8s/` — it's a separate, independently-pointed frontend. To use it, point
+  it at a running NetAgent instance.
 - **Kubernetes AI Agent** — two implementations of the same logic:
   - `KubernetesAiAgent.NetAgent` — ASP.NET Core + Microsoft Agent Framework. `GET /v1/models` is
     hand-rolled; `POST /v1/chat/completions` is provided by `Microsoft.Agents.AI.Hosting.OpenAI`'s
     `MapOpenAIChatCompletions`; `/agui` by `Microsoft.Agents.AI.Hosting.AGUI.AspNetCore`'s
     `MapAGUIServer`. This is bleeding-edge, date-versioned prerelease software; re-verify exact method
-    signatures against whatever version is installed if things don't compile.
-  - `KubernetesAiAgent.PyAgent` — FastAPI + Microsoft Agent Framework for Python, managed with `uv`.
-    `/agui` is provided by `agent_framework_ag_ui.add_agent_framework_fastapi_endpoint`. Also prerelease
-    software — verify against the installed package versions (`uv run python -c "import agent_framework"`
-    etc.) rather than trusting stale docs.
+    signatures against whatever version is installed if things don't compile. It's the backend the AppHost
+    starts and `k8s/` deploys.
+  - `KubernetesAiAgent.PyAgent` (`python/KubernetesAiAgent.PyAgent`) — FastAPI + Microsoft Agent Framework
+    for Python, managed with `uv`. `/agui` is provided by
+    `agent_framework_ag_ui.add_agent_framework_fastapi_endpoint`. Also prerelease software — verify against
+    the installed package versions (`uv run python -c "import agent_framework"` etc.) rather than trusting
+    stale docs. Runnable standalone (`uv run main.py`) and tested (`uv run pytest`), but not
+    AppHost-orchestrated or deployed by `k8s/` — kept for future development.
   - Config shape is intentionally identical between the two (`agentconfig.yaml` /
     `agentconfig.{Environment}.yaml`, `Agent__...` env var nesting) so the same values apply to either.
     One difference: PyAgent's `Agent__McpServers` env var must be a single JSON array (pydantic-settings
     has no equivalent of ASP.NET Core's indexed `Agent__McpServers__0__Name` env vars) — see
-    `src/backend/python/KubernetesAiAgent.PyAgent/README.md`.
+    `python/KubernetesAiAgent.PyAgent/README.md`.
 - **OpenRouter** — the LLM provider, an OpenAI-compatible model marketplace. Configured (not hard-coded) via
   `Agent:ModelConnection:Endpoint` / `Model` / `ApiKey` (NetAgent) or `Agent__ModelConnection__*` (PyAgent);
   both pin `deepseek/deepseek-v4-flash-0731` by default, but neither agent assumes a specific model name.
@@ -114,9 +125,9 @@ Browser -> webui (AG-UI) -> Kubernetes AI Agent (PyAgent) -> Microsoft Agent Fra
   — see `KubernetesAgentFactory.cs` / `agent_factory.py`. The MCP server exposes only read-only (`get`/`list`/
   `watch`) tools by design, so neither agent additionally filters the tool list app-side — RBAC on the MCP
   server's ServiceAccount is the enforcement point (docs/ARCHITECTURE.md §8).
-- **Aspire AppHost** — orchestrates local dev: starts the PyAgent project (via `AddPythonApp(...).WithUv()`,
-  which runs `uv sync` automatically) and the webui npm app, wires service discovery, surfaces
-  logs/endpoints/topology in the Aspire dashboard. Does not currently start NetAgent or NextChat.
+- **Aspire AppHost** — orchestrates local dev: starts the NetAgent project (`AddProject<Projects.KubernetesAiAgent_NetAgent>`)
+  and the webui npm app, wires service discovery, surfaces logs/endpoints/topology in the Aspire dashboard.
+  Does not start PyAgent or NextChat.
 
 ## Non-negotiable design principles (docs/ARCHITECTURE.md §20)
 

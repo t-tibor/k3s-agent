@@ -1,6 +1,6 @@
 """``/health`` and ``/alive``. Mirrors the behavior documented on
 ``AgentConfigurationHealthCheck``/``ModelConnectionConfigurationHealthCheck``
-(../../src/backend/dotnet/KubernetesAiAgent.NetAgent/Health/) and the implicit boot assertion in ``ModelsEndpointTests.cs``.
+(../../dotnet/KubernetesAiAgent.NetAgent/Health/) and the implicit boot assertion in ``ModelsEndpointTests.cs``.
 
 Configuration-presence checks are exercised two ways here: end-to-end through the real app for the
 happy path (:func:`kubernetes_agent.app.create_app` already validates ``AgentOptions`` eagerly, so an

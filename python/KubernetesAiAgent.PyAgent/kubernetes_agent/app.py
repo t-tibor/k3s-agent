@@ -52,7 +52,7 @@ def create_app() -> FastAPI:
     # No forced HTTPS redirect: in local dev, frontends are pointed at this API's HTTP endpoint to avoid
     # the browser rejecting a dev cert (docs/ARCHITECTURE.md §3.2) — redirecting would break that.
 
-    # The custom AG-UI frontend (src/frontend) calls this API directly from client-side JavaScript, so CORS
+    # The custom AG-UI frontend (dotnet/KubernetesAiAgent.WebUI) calls this API directly from client-side JavaScript, so CORS
     # must allow it. No credentials are sent cross-origin, so allowing any origin is safe — mirrors the
     # .NET agent's FrontendCorsPolicy exactly. allow_credentials=False is required to pair with "*".
     app.add_middleware(

@@ -4,8 +4,6 @@ using KubernetesAiAgent.NetAgent.Configuration;
 using KubernetesAiAgent.NetAgent.Health;
 using Microsoft.Agents.AI.Hosting.AGUI.AspNetCore;
 
-const string FrontendCorsPolicy = "Frontend";
-
 var builder = WebApplication.CreateBuilder(args);
 
 // Agent config lives in its own YAML file rather than appsettings.json — easier to hand-author as a Kubernetes
@@ -36,16 +34,6 @@ builder.Services.AddHealthChecks()
     .AddCheck<AgentConfigurationHealthCheck>("agent-configuration")
     .AddCheck<ModelConnectionConfigurationHealthCheck>("model-connection-configuration");
 
-// The custom AG-UI frontend (src/frontend) calls this API directly from client-side JavaScript rather than through
-// a server-side proxy (docs/ARCHITECTURE.md §3.2) — unlike NextChat, which calls it from its own Node process.
-// No credentials are sent cross-origin by this API, so allowing any origin is safe. Note that AllowAnyOrigin is
-// incompatible with AllowCredentials: a frontend that ever needs cookies or auth headers cross-origin would have
-// to switch this to WithOrigins(...).AllowCredentials().
-builder.Services.AddCors(corsOptions => corsOptions.AddPolicy(FrontendCorsPolicy, policy =>
-{
-    policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
-}));
-
 var app = builder.Build();
 
 app.MapDefaultEndpoints();
@@ -64,8 +52,6 @@ if (app.Environment.IsDevelopment())
 // No forced HTTPS redirect: in local dev, frontends are pointed at this API's HTTP endpoint to avoid the browser
 // rejecting the ASP.NET Core dev-cert (docs/ARCHITECTURE.md §3.2) — redirecting would break that.
 
-app.UseCors(FrontendCorsPolicy);
-
 app.MapModelsEndpoint();
 app.MapOpenAIChatCompletions(kubernetesAgent, path: "/v1/chat/completions", KubernetesAgentFactory.ChatCompletionsMapOptions);
 
@@ -73,6 +59,14 @@ app.MapOpenAIChatCompletions(kubernetesAgent, path: "/v1/chat/completions", Kube
 // updates) rather than OpenAI chat completions — exposes the same underlying AIAgent, just via a different
 // wire protocol. Purely additive: doesn't change /v1/chat/completions or its NextChat integration.
 app.MapAGUIServer("/agui", kubernetesAgent);
+
+// Serves the built KubernetesAiAgent.WebUI bundle (wwwroot, produced by that project's publish-time MSBuild
+// target — see KubernetesAiAgent.NetAgent.csproj) so the SPA and /agui share one origin/pod in production.
+// wwwroot doesn't exist for a plain `dotnet run`/local Aspire dev (which uses the Vite dev server instead —
+// see AppHost.cs), so these routes just 404 harmlessly there.
+app.UseDefaultFiles();
+app.UseStaticFiles();
+app.MapFallbackToFile("index.html");
 
 app.Run();
 

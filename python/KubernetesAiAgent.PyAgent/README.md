@@ -4,7 +4,7 @@ Python port of the Kubernetes AI Agent backend (`KubernetesAiAgent.NetAgent`), b
 [Microsoft Agent Framework](https://github.com/microsoft/agent-framework) for Python and managed with
 [uv](https://docs.astral.sh/uv/).
 
-See the repository root [CLAUDE.md](../../../../CLAUDE.md) and [docs/ARCHITECTURE.md](../../../../docs/ARCHITECTURE.md)
+See the repository root [CLAUDE.md](../../CLAUDE.md) and [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md)
 for the overall system design; this file covers only what's specific to the Python agent.
 
 ## Why AG-UI only
@@ -15,7 +15,8 @@ for Python currently has no server-side hosting extension equivalent to .NET's
 `Microsoft.Agents.AI.Hosting.OpenAI` (`MapOpenAIChatCompletions`). Only the AG-UI FastAPI integration
 (`agent_framework_ag_ui.add_agent_framework_fastapi_endpoint`) exists. As a result:
 
-- The custom AG-UI frontend (`src/frontend`) works against this agent — it already speaks AG-UI natively.
+- The custom AG-UI frontend (`dotnet/KubernetesAiAgent.WebUI`) works against this agent — it already speaks
+  AG-UI natively.
 - NextChat (the OpenAI-compatible chat UI used with the .NET agent) does **not** — it only speaks
   chat-completions. Point NextChat at a running `KubernetesAiAgent.NetAgent` instance instead.
 
@@ -51,7 +52,7 @@ uv run main.py
 ```
 
 Binds to `http://0.0.0.0:$PORT` (default `5192`, matching the .NET agent's pinned dev port and the
-`src/frontend` dev fallback URL).
+webui's dev fallback URL).
 
 ## Tests
 
@@ -66,12 +67,8 @@ under this project (see `pyproject.toml`'s `testpaths`), so the same suite sits 
 under `tests/`. Tests never reach a real OpenRouter endpoint or a real MCP server — see
 `tests/python/conftest.py`.
 
-## Running via the Aspire AppHost
+## Not orchestrated by the Aspire AppHost
 
-`dotnet run --project ../../../../appHost/KubernetesAiAgent.AppHost` starts this agent (via
-`AddPythonApp(...).WithUv()`, which runs `uv sync` automatically) alongside the `frontend` app. The
-OpenRouter API key is supplied as an AppHost parameter, not this project's own secrets:
-
-```bash
-dotnet user-secrets set "Parameters:openrouter-api-key" "<key>" --project ../../../../appHost/KubernetesAiAgent.AppHost
-```
+The AppHost starts `KubernetesAiAgent.NetAgent`, not this agent (see the repository root CLAUDE.md "Which
+agent runs") — run this project standalone (above) if you need it. It's kept buildable and tested for future
+development, but isn't wired into local Aspire dev or the `k8s/` deployment.

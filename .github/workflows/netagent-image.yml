@@ -1,29 +1,32 @@
-name: WebUI Image (arm64)
+name: NetAgent Image (arm64)
 
-# Builds and pushes the frontend (src/frontend) container image for linux/arm64 (k3s target
+# Builds and pushes the KubernetesAiAgent.NetAgent container image for linux/arm64 (k3s target
 # architecture) to GHCR, then retags k8s/kustomization.yaml to the pushed image and commits it back
-# (GitOps). Mirrors pyagent-image.yml — see that workflow's header comment for the general shape;
-# differences here:
-#   - build context is the repo root, not the project dir, since src/frontend/Dockerfile needs to
-#     COPY package.json/source from src/frontend but is invoked with that as its context already
-#     (see the Dockerfile's own header comment) — CONTEXT is set to src/frontend to match
-#   - VITE_AGENT_URL is a Vite build-time arg baked into the compiled bundle; left unset here so the
-#     image keeps the code's own localhost:5192 fallback (see src/frontend/Dockerfile), consistent
-#     with the port-forward workflow in k8s/README.md
+# (GitOps). Modeled on pyagent-image.yml's earlier QEMU + Buildx + GHCR login + kustomize-commit pattern
+# (see git history), adapted for this image:
+#   - build context is dotnet/ (this workflow's CONTEXT), not the repo root, since the Dockerfile's
+#     PublishWebUI build step needs the sibling KubernetesAiAgent.WebUI and KubernetesAiAgent.ServiceDefaults
+#     project directories alongside KubernetesAiAgent.NetAgent (see the Dockerfile's own header comment)
+#   - triggers on all three of those project directories, since a change to any of them changes this image
+#   - platform is linux/arm64 only, per this repo's k3s target — not multi-arch
+#   - the manifest-update/commit step is skipped on tag pushes (HEAD is detached there, so there's no
+#     branch to push the retag commit onto) — it still runs on master pushes and workflow_dispatch
 
 on:
   push:
     branches: [master]
     tags: ["v*"]
     paths:
-      - "src/frontend/**"
-      - ".github/workflows/webui-image.yml"
+      - "dotnet/KubernetesAiAgent.NetAgent/**"
+      - "dotnet/KubernetesAiAgent.WebUI/**"
+      - "dotnet/KubernetesAiAgent.ServiceDefaults/**"
+      - ".github/workflows/netagent-image.yml"
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/webui
-  CONTEXT: src/frontend
+  IMAGE_NAME: ${{ github.repository }}/netagent
+  CONTEXT: dotnet
 
 jobs:
   build-and-push:
@@ -69,7 +72,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ${{ env.CONTEXT }}
-          file: ${{ env.CONTEXT }}/Dockerfile
+          file: ${{ env.CONTEXT }}/KubernetesAiAgent.NetAgent/Dockerfile
           platforms: linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
@@ -87,7 +90,7 @@ jobs:
         if: github.ref_type != 'tag'
         working-directory: k8s
         run: |
-          kustomize edit set image k3s-agent/webui=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.sha_short }}
+          kustomize edit set image k3s-agent/kubernetes-agent=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.sha_short }}
 
       - name: Commit and push manifest
         if: github.ref_type != 'tag'
@@ -96,5 +99,5 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add k8s/kustomization.yaml
           git diff --cached --quiet && echo "No changes to commit" && exit 0
-          git commit -m "deploy: update webui image to ${{ steps.vars.outputs.sha_short }}"
+          git commit -m "deploy: update netagent image to ${{ steps.vars.outputs.sha_short }}"
           git push
