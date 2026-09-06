@@ -1,6 +1,13 @@
 # KubernetesAiAgent.NetAgent, built by dotnet/KubernetesAiAgent.NetAgent/Dockerfile (docs/ARCHITECTURE.md
 # §16, §17). Serves both the built KubernetesAiAgent.WebUI SPA and the /agui API from this one pod/Service
 # (§3.4) — there is no separate webui Deployment/Service.
+#
+# Also runs the Aspire dashboard as a sidecar container in this same Pod, purely for observability (not
+# part of the request path). NetAgent exports OpenTelemetry traces/logs/metrics to it over localhost, and
+# proxies /dashboard/** on its own port so the dashboard UI is reachable through the existing Service
+# without exposing another port (see dotnet/KubernetesAiAgent.NetAgent/Program.cs's AddReverseProxy). The
+# dashboard keeps all telemetry in memory only (see k8s/README.md) — it has no volume and loses everything
+# on restart; that's expected, it's a live debugging view, not a durable telemetry store.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -31,6 +38,22 @@ spec:
                 secretKeyRef:
                   name: kubernetes-agent-secrets
                   key: openrouter-api-key
+            # Enables the OTLP exporter in KubernetesAiAgent.ServiceDefaults (Extensions.cs) — sent to the
+            # aspire-dashboard sidecar below over localhost, since they share this Pod's network namespace.
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://localhost:18889"
+            # Matches Dashboard__Otlp__PrimaryApiKey on the sidecar — the OTLP endpoint isn't exposed
+            # outside this Pod, but requiring a key here means a compromise of anything else sharing the
+            # Pod's network namespace still can't inject fake telemetry. $(...) is Kubernetes' own env-var
+            # expansion (references the DASHBOARD_OTLP_API_KEY defined below it in this same list), not a
+            # shell — it lets both containers share one secret value without duplicating it.
+            - name: DASHBOARD_OTLP_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: kubernetes-agent-secrets
+                  key: dashboard-otlp-api-key
+            - name: OTEL_EXPORTER_OTLP_HEADERS
+              value: "x-otlp-api-key=$(DASHBOARD_OTLP_API_KEY)"
           volumeMounts:
             - name: config
               mountPath: /app/agentconfig.yaml
@@ -65,9 +88,85 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
+
+        # Aspire dashboard sidecar — observability only, not on the request path (see comment at top of
+        # file). Reached exclusively through the kubernetes-agent container's own /dashboard/** proxy route
+        # (Program.cs); nothing here is exposed via agent-service.yaml, so binding to all interfaces below
+        # is safe — the only thing that can reach these ports is another container in this same Pod.
+        - name: aspire-dashboard
+          image: mcr.microsoft.com/dotnet/aspire-dashboard:13.5.2
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: dashboard-http
+              containerPort: 18888
+            - name: dashboard-otlp
+              containerPort: 18889
+          env:
+            - name: ASPNETCORE_URLS
+              value: "http://+:18888"
+            - name: ASPIRE_DASHBOARD_OTLP_ENDPOINT_URL
+              value: "http://+:18889"
+            # Requires the same key the kubernetes-agent container sends as OTEL_EXPORTER_OTLP_HEADERS
+            # above — see that comment for why this is one shared secret value, not two.
+            - name: DASHBOARD__OTLP__AUTHMODE
+              value: "ApiKey"
+            - name: DASHBOARD__OTLP__PRIMARYAPIKEY
+              valueFrom:
+                secretKeyRef:
+                  name: kubernetes-agent-secrets
+                  key: dashboard-otlp-api-key
+            # Dashboard:Frontend:AuthMode is Unsecured rather than the default BrowserToken — the dashboard
+            # UI has no auth of its own at that point, so treat reachability the same as any other
+            # unauthenticated endpoint here: agent-service.yaml is ClusterIP-only (docs/ARCHITECTURE.md
+            # §9.2), so this only matters to whoever can already reach the Service (kubectl port-forward,
+            # or anything later put in front of it, e.g. an Ingress) — switch back to BrowserToken (or
+            # OpenIdConnect) before exposing this beyond that.
+            - name: DASHBOARD__FRONTEND__AUTHMODE
+              value: "Unsecured"
+            # Dashboard:TelemetryLimits:* control how much telemetry is kept in memory before the oldest
+            # entries are evicted (see k8s/README.md) — lowered from the defaults (10,000 / 10,000 / 50,000)
+            # so the sidecar's memory limit below can be 256Mi instead of 512Mi. Raise both together if you
+            # want more history. Dashboard:Frontend:PublicUrl is worth setting too if you expose this
+            # outside a port-forward (e.g. via an Ingress) — it's what the dashboard uses to build any
+            # absolute links it renders; unset, it falls back to this container's own http://localhost:18888,
+            # which is wrong once requests arrive through a different public URL.
+            - name: DASHBOARD__TELEMETRYLIMITS__MAXLOGCOUNT
+              value: "2000"
+            - name: DASHBOARD__TELEMETRYLIMITS__MAXTRACECOUNT
+              value: "2000"
+            - name: DASHBOARD__TELEMETRYLIMITS__MAXMETRICSCOUNT
+              value: "10000"
+          volumeMounts:
+            - name: dashboard-tmp
+              mountPath: /tmp
+          readinessProbe:
+            tcpSocket:
+              port: dashboard-http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: dashboard-http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi # in-memory telemetry storage — sized for the TelemetryLimits set above.
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
       volumes:
         - name: config
           configMap:
             name: kubernetes-agent-config
         - name: tmp
+          emptyDir: {}
+        - name: dashboard-tmp
           emptyDir: {}

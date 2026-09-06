@@ -3,6 +3,7 @@ using KubernetesAiAgent.NetAgent.Api;
 using KubernetesAiAgent.NetAgent.Configuration;
 using KubernetesAiAgent.NetAgent.Health;
 using Microsoft.Agents.AI.Hosting.AGUI.AspNetCore;
+using Yarp.ReverseProxy.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,6 +35,36 @@ builder.Services.AddHealthChecks()
     .AddCheck<AgentConfigurationHealthCheck>("agent-configuration")
     .AddCheck<ModelConnectionConfigurationHealthCheck>("model-connection-configuration");
 
+// Proxies /dashboard/** to the Aspire dashboard sidecar (k8s/agent-deployment.yaml) so the dashboard is
+// reachable through this same pod/Service/port instead of needing its own port exposed. "Dashboard:Url"
+// is configurable (docs/ARCHITECTURE.md §20 design principle 5 — don't hard-code endpoints) but defaults
+// to the sidecar's well-known same-pod address, since that's how it's always deployed today. The
+// PathRemovePrefix transform is what lets the dashboard app itself see requests as if mounted at "/" — it
+// has no notion of being served under a path prefix, so without this its own generated links/assets would
+// break (see chat discussion / k8s/README.md).
+var dashboardUrl = builder.Configuration["Dashboard:Url"] ?? "http://localhost:18888";
+builder.Services.AddReverseProxy()
+    .LoadFromMemory(
+        [
+            new RouteConfig
+            {
+                RouteId = "aspire-dashboard",
+                ClusterId = "aspire-dashboard",
+                Match = new RouteMatch { Path = "/dashboard/{**catch-all}" },
+                Transforms = [new Dictionary<string, string> { ["PathRemovePrefix"] = "/dashboard" }]
+            }
+        ],
+        [
+            new ClusterConfig
+            {
+                ClusterId = "aspire-dashboard",
+                Destinations = new Dictionary<string, DestinationConfig>
+                {
+                    ["aspire-dashboard"] = new() { Address = dashboardUrl }
+                }
+            }
+        ]);
+
 var app = builder.Build();
 
 app.MapDefaultEndpoints();
@@ -59,6 +90,9 @@ app.MapOpenAIChatCompletions(kubernetesAgent, path: "/v1/chat/completions", Kube
 // updates) rather than OpenAI chat completions — exposes the same underlying AIAgent, just via a different
 // wire protocol. Purely additive: doesn't change /v1/chat/completions or its NextChat integration.
 app.MapAGUIServer("/agui", kubernetesAgent);
+
+// Forwards /dashboard/** to the Aspire dashboard sidecar — see the AddReverseProxy() registration above.
+app.MapReverseProxy();
 
 // Serves the built KubernetesAiAgent.WebUI bundle (wwwroot, produced by that project's publish-time MSBuild
 // target — see KubernetesAiAgent.NetAgent.csproj) so the SPA and /agui share one origin/pod in production.

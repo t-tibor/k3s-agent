@@ -58,7 +58,8 @@ kubectl apply -f k8s/agent-configmap.yaml
 # Real secret, not the committed template — see the comments in agent-secret.example.yaml.
 kubectl create secret generic kubernetes-agent-secrets \
   --namespace k3s-agent \
-  --from-literal=openrouter-api-key='<your OpenRouter API key>'
+  --from-literal=openrouter-api-key='<your OpenRouter API key>' \
+  --from-literal=dashboard-otlp-api-key="$(openssl rand -hex 32)"
 
 kubectl apply -f k8s/agent-deployment.yaml -f k8s/agent-service.yaml
 ```
@@ -76,6 +77,37 @@ kubectl port-forward -n k3s-agent svc/kubernetes-agent 8080:8080
 
 Then open `http://localhost:8080` — the page and its `/agui` calls both come from that same origin, so a
 single port-forward is all this needs.
+
+## 5. Observability (Aspire dashboard)
+
+`agent-deployment.yaml` also runs the Aspire dashboard as a sidecar in the same Pod (not deployed as its
+own resource). `kubernetes-agent` exports OpenTelemetry traces, logs, and metrics to it over `localhost`,
+and proxies the dashboard UI itself through its own `/dashboard` path (see
+`dotnet/KubernetesAiAgent.NetAgent/Program.cs`) — no extra Service or port-forward needed beyond the one
+above. Open `http://localhost:8080/dashboard`.
+
+The dashboard's login page asks for a browser token, auto-generated fresh on every pod (re)start — never
+stored as a Secret. Retrieve the current one from the sidecar's own logs:
+
+```bash
+kubectl logs -n k3s-agent deployment/kubernetes-agent -c aspire-dashboard | grep -i "login?t="
+```
+
+**Storage and retention**: the dashboard keeps everything in memory only — there's no volume for it, and a
+pod restart (or `kubectl rollout restart`) discards all previously collected telemetry. It's a live
+debugging view, not a durable telemetry store; point `OTEL_EXPORTER_OTLP_ENDPOINT` at a real backend
+(Tempo/Loki/Prometheus, an OTel Collector, Azure Monitor, etc.) instead if you need telemetry to survive a
+restart or be queryable over a longer window. Within that in-memory window, how much it holds before
+evicting the oldest entries is controlled by `Dashboard:TelemetryLimits:*` env vars on the
+`aspire-dashboard` container (`agent-deployment.yaml`) — set there to 2,000 log entries, 2,000 traces, and
+10,000 metric data points (defaults are 10,000 / 10,000 / 50,000), which is what lets the sidecar's memory
+limit be 256Mi instead of the ~512Mi+ the defaults would need. Raise both the limits and the memory
+together if you want more history.
+
+The dashboard UI's own auth is set to `Dashboard:Frontend:AuthMode=Unsecured` — anyone who can reach
+`agent-service.yaml` (ClusterIP-only, so today that means `kubectl port-forward` or in-cluster access) can
+open `/dashboard` with no login. Switch it back to the default `BrowserToken` (or `OpenIdConnect`) before
+putting anything in front of that Service that widens who can reach it, e.g. an Ingress.
 
 ## Updating
 
