@@ -1,8 +1,8 @@
-using KubernetesAiAgent.Agent.Configuration;
+using KubernetesAiAgent.NetAgent.Configuration;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 
-namespace KubernetesAiAgent.Agent.Health;
+namespace KubernetesAiAgent.NetAgent.Health;
 
 /// <summary>
 /// Readiness check: model-connection configuration is present. Deliberately does not call the model provider —

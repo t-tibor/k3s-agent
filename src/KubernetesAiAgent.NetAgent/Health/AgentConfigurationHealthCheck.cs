@@ -1,8 +1,8 @@
-using KubernetesAiAgent.Agent.Configuration;
+using KubernetesAiAgent.NetAgent.Configuration;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 
-namespace KubernetesAiAgent.Agent.Health;
+namespace KubernetesAiAgent.NetAgent.Health;
 
 /// <summary>
 /// Readiness check: the agent has the minimum configuration required to serve requests. Deliberately does not

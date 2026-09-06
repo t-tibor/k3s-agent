@@ -1,11 +1,8 @@
 <Project Sdk="Aspire.AppHost.Sdk/13.5.2">
 
   <ItemGroup>
-    <ProjectReference Include="..\KubernetesAiAgent.Agent\KubernetesAiAgent.Agent.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
     <PackageReference Include="Aspire.Hosting.NodeJs" Version="9.5.2" />
+    <PackageReference Include="Aspire.Hosting.Python" Version="13.5.3" />
   </ItemGroup>
 
   <PropertyGroup>

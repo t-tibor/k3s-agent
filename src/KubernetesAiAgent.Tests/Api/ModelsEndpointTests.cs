@@ -1,6 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
-using KubernetesAiAgent.Agent.Api;
+using KubernetesAiAgent.NetAgent.Api;
 
 namespace KubernetesAiAgent.Tests.Api;
 

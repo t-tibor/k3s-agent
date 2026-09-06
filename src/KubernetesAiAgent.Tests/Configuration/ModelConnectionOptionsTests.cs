@@ -1,5 +1,5 @@
 using System.ComponentModel.DataAnnotations;
-using KubernetesAiAgent.Agent.Configuration;
+using KubernetesAiAgent.NetAgent.Configuration;
 
 namespace KubernetesAiAgent.Tests.Configuration;
 

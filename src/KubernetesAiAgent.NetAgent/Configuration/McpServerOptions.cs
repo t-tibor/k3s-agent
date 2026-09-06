@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace KubernetesAiAgent.Agent.Configuration;
+namespace KubernetesAiAgent.NetAgent.Configuration;
 
 /// <summary>
 /// Connection settings for one MCP server the agent should discover read-only tools from (docs/ARCHITECTURE.md

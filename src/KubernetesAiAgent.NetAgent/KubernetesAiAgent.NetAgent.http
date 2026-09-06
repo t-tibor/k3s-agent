@@ -1,16 +1,16 @@
-@KubernetesAiAgent.Agent_HostAddress = http://localhost:5192
+@KubernetesAiAgent.NetAgent_HostAddress = http://localhost:5192
 
-GET {{KubernetesAiAgent.Agent_HostAddress}}/health
+GET {{KubernetesAiAgent.NetAgent_HostAddress}}/health
 Accept: application/json
 
 ###
 
-GET {{KubernetesAiAgent.Agent_HostAddress}}/v1/models
+GET {{KubernetesAiAgent.NetAgent_HostAddress}}/v1/models
 Accept: application/json
 
 ###
 
-POST {{KubernetesAiAgent.Agent_HostAddress}}/v1/chat/completions
+POST {{KubernetesAiAgent.NetAgent_HostAddress}}/v1/chat/completions
 Content-Type: application/json
 
 {

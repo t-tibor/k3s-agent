@@ -1,4 +1,4 @@
-namespace KubernetesAiAgent.Agent.Agent;
+namespace KubernetesAiAgent.NetAgent.Agent;
 
 /// <summary>
 /// Default system prompt for the Kubernetes agent (docs/ARCHITECTURE.md §6.1), kept in one dedicated place rather

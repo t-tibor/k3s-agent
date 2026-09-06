@@ -1,7 +1,7 @@
-using KubernetesAiAgent.Agent.Agent;
-using KubernetesAiAgent.Agent.Api;
-using KubernetesAiAgent.Agent.Configuration;
-using KubernetesAiAgent.Agent.Health;
+using KubernetesAiAgent.NetAgent.Agent;
+using KubernetesAiAgent.NetAgent.Api;
+using KubernetesAiAgent.NetAgent.Configuration;
+using KubernetesAiAgent.NetAgent.Health;
 using Microsoft.Agents.AI.Hosting.AGUI.AspNetCore;
 
 const string FrontendCorsPolicy = "Frontend";

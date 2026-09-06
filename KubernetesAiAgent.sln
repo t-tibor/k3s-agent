@@ -9,7 +9,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KubernetesAiAgent.AppHost",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KubernetesAiAgent.ServiceDefaults", "src\KubernetesAiAgent.ServiceDefaults\KubernetesAiAgent.ServiceDefaults.csproj", "{C312985B-F414-42F5-9AD7-62B8B9AB7254}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KubernetesAiAgent.Agent", "src\KubernetesAiAgent.Agent\KubernetesAiAgent.Agent.csproj", "{852A5031-CA97-41ED-BE04-AFD48DCECEE5}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KubernetesAiAgent.NetAgent", "src\KubernetesAiAgent.NetAgent\KubernetesAiAgent.NetAgent.csproj", "{852A5031-CA97-41ED-BE04-AFD48DCECEE5}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KubernetesAiAgent.Tests", "src\KubernetesAiAgent.Tests\KubernetesAiAgent.Tests.csproj", "{AE1E889B-A540-40CF-BD52-9E1F01A86CB4}"
 EndProject

@@ -20,7 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\KubernetesAiAgent.Agent\KubernetesAiAgent.Agent.csproj" />
+    <ProjectReference Include="..\KubernetesAiAgent.NetAgent\KubernetesAiAgent.NetAgent.csproj" />
   </ItemGroup>
 
 </Project>

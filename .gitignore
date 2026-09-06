@@ -487,3 +487,14 @@ $RECYCLE.BIN/
 node_modules/
 dist/
 *.tsbuildinfo
+
+# Python (src/KubernetesAiAgent.PyAgent)
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+.pytest_cache/
+*.egg-info/
+
+# Kubernetes secrets (see k8s/agent-secret.example.yaml — never commit the filled-in version)
+k8s/agent-secret.yaml

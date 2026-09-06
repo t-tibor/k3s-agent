@@ -1,7 +1,7 @@
-using KubernetesAiAgent.Agent.Configuration;
+using KubernetesAiAgent.NetAgent.Configuration;
 using Microsoft.Extensions.Options;
 
-namespace KubernetesAiAgent.Agent.Api;
+namespace KubernetesAiAgent.NetAgent.Api;
 
 /// <summary>
 /// <c>GET /v1/models</c> — model discovery (docs/ARCHITECTURE.md §5.1).

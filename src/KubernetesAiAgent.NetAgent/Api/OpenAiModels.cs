@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace KubernetesAiAgent.Agent.Api;
+namespace KubernetesAiAgent.NetAgent.Api;
 
 // Wire-format DTOs for the parts of the OpenAI API this backend hand-rolls (docs/ARCHITECTURE.md §5.1). Chat
 // completions are handled by Microsoft.Agents.AI.Hosting.OpenAI (docs/ARCHITECTURE.md §6.3), which owns its own

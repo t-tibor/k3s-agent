@@ -919,7 +919,7 @@ src/
 ├── KubernetesAiAgent.AppHost/
 │   └── Program.cs
 │
-├── KubernetesAiAgent.Agent/
+├── KubernetesAiAgent.NetAgent/            # .NET implementation — OpenAI chat-completions + AG-UI
 │   ├── Program.cs
 │   ├── Agent/
 │   │   ├── KubernetesAgentFactory.cs    # composes chat client + MCP tools into the AIAgent, see §6.3, §7.4
@@ -935,10 +935,23 @@ src/
 │   ├── agentconfig.yaml                 # checked in, no secrets — see §10
 │   ├── agentconfig.Development.yaml
 │   ├── appsettings.json                 # ASP.NET Core boilerplate only (Logging, AllowedHosts)
-│   ├── appsettings.Development.json
-│   └── Dockerfile
+│   └── appsettings.Development.json
 │
-├── KubernetesAiAgent.Tests/
+├── KubernetesAiAgent.PyAgent/             # Python port on Microsoft Agent Framework, uv-managed — AG-UI only
+│   ├── main.py                          # entrypoint: uvicorn on $PORT
+│   ├── pyproject.toml / uv.lock
+│   ├── kubernetes_agent/
+│   │   ├── app.py                       # FastAPI app factory + lifespan, see note below
+│   │   ├── agent_factory.py             # composes chat client + MCP tools, mirrors KubernetesAgentFactory.cs
+│   │   ├── config.py                    # pydantic-settings mirror of AgentOptions.cs et al.
+│   │   ├── health.py
+│   │   ├── telemetry.py
+│   │   └── instructions.py
+│   ├── tests/                           # pytest, mirrors KubernetesAiAgent.Tests
+│   ├── agentconfig.yaml                 # same keys/shape as NetAgent's — see §10, §21
+│   └── agentconfig.Development.yaml
+│
+├── KubernetesAiAgent.Tests/               # xUnit, tests NetAgent only
 │   ├── Api/
 │   ├── Configuration/
 │   └── Integration/
@@ -958,6 +971,15 @@ k8s/
 ```
 
 The exact structure may be adjusted during implementation.
+
+**Note — `KubernetesAiAgent.PyAgent` is AG-UI only.** Microsoft Agent Framework for Python has no
+server-side hosting extension equivalent to .NET's `Microsoft.Agents.AI.Hosting.OpenAI`
+(`MapOpenAIChatCompletions`) — only the AG-UI FastAPI integration
+(`agent_framework_ag_ui.add_agent_framework_fastapi_endpoint`, see §5.3, §6.3, §7.4 for the .NET
+equivalents this mirrors) exists as of this writing. PyAgent therefore exposes `/agui`, `/health`, and
+`/alive`, but not `/v1/chat/completions` or `GET /v1/models` — NextChat (§3.2, §18.3) cannot be pointed at
+it; only the custom AG-UI frontend (`src/webui`) can. If a Python OpenAI-compatible hosting extension is
+released later, `KubernetesAiAgent.NetAgent`'s API contract (§5) is the target to match.
 
 ---
 

@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace KubernetesAiAgent.Agent.Configuration;
+namespace KubernetesAiAgent.NetAgent.Configuration;
 
 /// <summary>
 /// The agent's single config root — model-connection settings, agent-level behavior, and the MCP servers to

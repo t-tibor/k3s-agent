@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace KubernetesAiAgent.Agent.Configuration;
+namespace KubernetesAiAgent.NetAgent.Configuration;
 
 /// <summary>
 /// Connection settings for the OpenAI-compatible chat model provider (docs/ARCHITECTURE.md §6.2). Currently

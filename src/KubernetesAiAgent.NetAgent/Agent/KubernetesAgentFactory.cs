@@ -1,5 +1,5 @@
 using System.ClientModel;
-using KubernetesAiAgent.Agent.Configuration;
+using KubernetesAiAgent.NetAgent.Configuration;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Hosting.OpenAI;
 using Microsoft.Extensions.AI;
@@ -8,7 +8,7 @@ using ModelContextProtocol.Client;
 using OpenAI;
 using OpenAI.Chat;
 
-namespace KubernetesAiAgent.Agent.Agent;
+namespace KubernetesAiAgent.NetAgent.Agent;
 
 /// <summary>
 /// Composes the real Kubernetes agent from <see cref="AgentOptions"/>: an OpenAI-compatible <see cref="IChatClient"/>
