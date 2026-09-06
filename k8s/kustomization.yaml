@@ -16,4 +16,4 @@ resources:
 images:
 - name: k3s-agent/kubernetes-agent
   newName: ghcr.io/t-tibor/k3s-agent/netagent
-  newTag: ab7674d
+  newTag: 1e2660d
