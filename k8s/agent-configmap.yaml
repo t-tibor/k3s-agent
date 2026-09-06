@@ -1,0 +1,25 @@
+# Mounted over the image's baked-in agentconfig.yaml (docs/ARCHITECTURE.md §10: "the whole thing can
+# later be reloaded as a unit from a mounted Kubernetes ConfigMap"). Edit and `kubectl apply` this to
+# change model/MCP config without rebuilding the image (the Deployment still needs a rollout to pick up
+# ConfigMap changes — see k8s/README.md).
+#
+# No secrets belong in here — Agent:ModelConnection:ApiKey comes from the Secret referenced by
+# agent-deployment.yaml instead.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubernetes-agent-config
+  namespace: k3s-agent
+data:
+  agentconfig.yaml: |
+    Agent:
+      ModelId: kubernetes-agent
+      ModelConnection:
+        Model: deepseek/deepseek-v4-flash-0731
+      McpServers:
+        # TODO: point these at your already-deployed Kubernetes MCP server's in-cluster Service DNS name,
+        # e.g. http://<service-name>.<namespace>.svc.cluster.local:<port>/mcp (docs/ARCHITECTURE.md §7.1,
+        # §16). Add further entries (e.g. a Prometheus MCP server) the same way — each is connected to
+        # independently and degrades gracefully if unreachable (§7.4).
+        - Name: k8s-mcp
+          Endpoint: "http://CHANGE-ME-k8s-mcp-service.CHANGE-ME-namespace.svc.cluster.local:8080/mcp"

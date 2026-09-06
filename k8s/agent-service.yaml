@@ -1,0 +1,18 @@
+# ClusterIP only (docs/ARCHITECTURE.md §9.2 for the equivalent NextChat/agent boundary reasoning); reach
+# it via `kubectl port-forward` for local browser access, or a future Ingress if you decide to add one —
+# see k8s/README.md.
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubernetes-agent
+  namespace: k3s-agent
+  labels:
+    app: kubernetes-agent
+spec:
+  type: ClusterIP
+  selector:
+    app: kubernetes-agent
+  ports:
+    - name: http
+      port: 5192
+      targetPort: http

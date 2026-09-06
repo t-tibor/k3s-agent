@@ -1,0 +1,77 @@
+# KubernetesAiAgent.PyAgent, the backend actually run by the Aspire AppHost today (docs/ARCHITECTURE.md
+# §16, §17). AG-UI only — see src/KubernetesAiAgent.PyAgent/README.md.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubernetes-agent
+  namespace: k3s-agent
+  labels:
+    app: kubernetes-agent
+spec:
+  replicas: 1 # stateless (docs/ARCHITECTURE.md §11, §20 design principle 8) — safe to scale up.
+  selector:
+    matchLabels:
+      app: kubernetes-agent
+  template:
+    metadata:
+      labels:
+        app: kubernetes-agent
+    spec:
+      containers:
+        - name: kubernetes-agent
+          image: k3s-agent/kubernetes-agent:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 5192
+          env:
+            - name: PORT
+              value: "5192"
+            - name: Agent__ModelConnection__ApiKey
+              valueFrom:
+                secretKeyRef:
+                  name: kubernetes-agent-secrets
+                  key: openrouter-api-key
+          volumeMounts:
+            - name: config
+              mountPath: /app/agentconfig.yaml
+              subPath: agentconfig.yaml
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          # PyAgent only registers /health and /alive when ENVIRONMENT=Development (mirrors the .NET
+          # agent's Aspire ServiceDefaults gate — see kubernetes_agent/health.py), which is deliberately
+          # not set here since this is a production deployment. A TCP check on the AG-UI port is the
+          # closest equivalent without adopting that gate for a real deployment.
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      securityContext:
+        fsGroup: 1000
+      volumes:
+        - name: config
+          configMap:
+            name: kubernetes-agent-config
+        - name: tmp
+          emptyDir: {}
