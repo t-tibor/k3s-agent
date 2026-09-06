@@ -18,7 +18,7 @@ resources:
 images:
 - name: k3s-agent/kubernetes-agent
   newName: ghcr.io/t-tibor/k3s-agent/pyagent
-  newTag: 3a1c676
+  newTag: bf9a2f8
 - name: k3s-agent/webui
   newName: ghcr.io/t-tibor/k3s-agent/webui
   newTag: 9aa3092
