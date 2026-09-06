@@ -4,7 +4,7 @@ Python port of the Kubernetes AI Agent backend (`KubernetesAiAgent.NetAgent`), b
 [Microsoft Agent Framework](https://github.com/microsoft/agent-framework) for Python and managed with
 [uv](https://docs.astral.sh/uv/).
 
-See the repository root [CLAUDE.md](../../CLAUDE.md) and [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md)
+See the repository root [CLAUDE.md](../../../../CLAUDE.md) and [docs/ARCHITECTURE.md](../../../../docs/ARCHITECTURE.md)
 for the overall system design; this file covers only what's specific to the Python agent.
 
 ## Why AG-UI only
@@ -15,7 +15,7 @@ for Python currently has no server-side hosting extension equivalent to .NET's
 `Microsoft.Agents.AI.Hosting.OpenAI` (`MapOpenAIChatCompletions`). Only the AG-UI FastAPI integration
 (`agent_framework_ag_ui.add_agent_framework_fastapi_endpoint`) exists. As a result:
 
-- The custom AG-UI frontend (`src/webui`) works against this agent — it already speaks AG-UI natively.
+- The custom AG-UI frontend (`src/frontend`) works against this agent — it already speaks AG-UI natively.
 - NextChat (the OpenAI-compatible chat UI used with the .NET agent) does **not** — it only speaks
   chat-completions. Point NextChat at a running `KubernetesAiAgent.NetAgent` instance instead.
 
@@ -51,7 +51,7 @@ uv run main.py
 ```
 
 Binds to `http://0.0.0.0:$PORT` (default `5192`, matching the .NET agent's pinned dev port and the
-`src/webui` dev fallback URL).
+`src/frontend` dev fallback URL).
 
 ## Tests
 
@@ -59,16 +59,19 @@ Binds to `http://0.0.0.0:$PORT` (default `5192`, matching the .NET agent's pinne
 uv run pytest
 ```
 
-Mirrors `KubernetesAiAgent.Tests`: config validation (`tests/test_config.py`), boot with an unreachable MCP
-server (`tests/test_agent_factory.py`), and the health endpoints (`tests/test_health.py`). Tests never
-reach a real OpenRouter endpoint or a real MCP server — see `tests/conftest.py`.
+Mirrors `KubernetesAiAgent.Tests`: config validation (`tests/python/test_config.py`), boot with an
+unreachable MCP server (`tests/python/test_agent_factory.py`), and the health endpoints
+(`tests/python/test_health.py`). Tests live in the repo's top-level `tests/python/` directory rather than
+under this project (see `pyproject.toml`'s `testpaths`), so the same suite sits alongside the .NET tests
+under `tests/`. Tests never reach a real OpenRouter endpoint or a real MCP server — see
+`tests/python/conftest.py`.
 
 ## Running via the Aspire AppHost
 
-`dotnet run --project ../KubernetesAiAgent.AppHost` starts this agent (via `AddPythonApp(...).WithUv()`,
-which runs `uv sync` automatically) alongside the `webui` frontend. The OpenRouter API key is supplied as
-an AppHost parameter, not this project's own secrets:
+`dotnet run --project ../../../../appHost/KubernetesAiAgent.AppHost` starts this agent (via
+`AddPythonApp(...).WithUv()`, which runs `uv sync` automatically) alongside the `frontend` app. The
+OpenRouter API key is supplied as an AppHost parameter, not this project's own secrets:
 
 ```bash
-dotnet user-secrets set "Parameters:openrouter-api-key" "<key>" --project ../KubernetesAiAgent.AppHost
+dotnet user-secrets set "Parameters:openrouter-api-key" "<key>" --project ../../../../appHost/KubernetesAiAgent.AppHost
 ```

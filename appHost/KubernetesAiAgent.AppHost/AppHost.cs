@@ -6,10 +6,10 @@ var builder = DistributedApplication.CreateBuilder(args);
 var openRouterApiKey = builder.AddParameter("openrouter-api-key", secret: true);
 
 // The Kubernetes AI Agent, ported to Python on Microsoft Agent Framework (see
-// src/KubernetesAiAgent.PyAgent). WithUv() runs `uv sync` before the app starts so its virtual environment
+// src/backend/python/KubernetesAiAgent.PyAgent). WithUv() runs `uv sync` before the app starts so its virtual environment
 // stays up to date. The port is pinned (rather than left to Aspire's per-run dynamic allocation) so its URL
 // is stable across AppHost restarts, and env: "PORT" is what main.py reads to bind uvicorn.
-var agent = builder.AddPythonApp("agent", "../KubernetesAiAgent.PyAgent", "main.py")
+var agent = builder.AddPythonApp("agent", "../../src/backend/python/KubernetesAiAgent.PyAgent", "main.py")
     .WithUv()
     .WithHttpEndpoint(port: 5192, env: "PORT")
     .WithEnvironment("ENVIRONMENT", "Development")
@@ -20,11 +20,11 @@ var agent = builder.AddPythonApp("agent", "../KubernetesAiAgent.PyAgent", "main.
 // exists yet in Microsoft Agent Framework for Python), so NextChat would have nothing to talk to. Point
 // NextChat at a running NetAgent instance instead if you need it.
 
-// Custom AG-UI frontend (src/webui): a Vite/React SPA that speaks the AG-UI protocol directly to the Agent's
+// Custom AG-UI frontend (src/frontend): a Vite/React SPA that speaks the AG-UI protocol directly to the Agent's
 // /agui endpoint from browser JavaScript — no Node-side proxy — so it can render agent messages and every MCP
 // tool call as they stream. This exercises the Agent's CORS policy (which allows any origin).
 // WithHttpEndpoint's env: "PORT" is what vite.config.ts reads to bind the port Aspire allocated.
-builder.AddNpmApp("webui", "../webui", "dev")
+builder.AddNpmApp("webui", "../../src/frontend", "dev")
     .WithHttpEndpoint(env: "PORT")
     .WithEnvironment("VITE_AGENT_URL", agent.GetEndpoint("http"))
     .WithReference(agent)

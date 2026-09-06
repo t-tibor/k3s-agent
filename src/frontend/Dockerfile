@@ -8,7 +8,7 @@
 # build time (e.g. behind an Ingress).
 #
 # Build from the repo root so the build context can reach package.json/source:
-#   docker build -f src/webui/Dockerfile -t k3s-agent/webui:latest src/webui
+#   docker build -f src/frontend/Dockerfile -t k3s-agent/webui:latest src/frontend
 
 FROM node:22-slim AS build
 

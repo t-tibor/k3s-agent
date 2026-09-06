@@ -36,7 +36,7 @@ builder.Services.AddHealthChecks()
     .AddCheck<AgentConfigurationHealthCheck>("agent-configuration")
     .AddCheck<ModelConnectionConfigurationHealthCheck>("model-connection-configuration");
 
-// The custom AG-UI frontend (src/webui) calls this API directly from client-side JavaScript rather than through
+// The custom AG-UI frontend (src/frontend) calls this API directly from client-side JavaScript rather than through
 // a server-side proxy (docs/ARCHITECTURE.md §3.2) — unlike NextChat, which calls it from its own Node process.
 // No credentials are sent cross-origin by this API, so allowing any origin is safe. Note that AllowAnyOrigin is
 // incompatible with AllowCredentials: a frontend that ever needs cookies or auth headers cross-origin would have

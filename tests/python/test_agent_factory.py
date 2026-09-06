@@ -1,5 +1,5 @@
 """Boot-with-unreachable-MCP graceful degradation. Python equivalent of the implicit assertion in
-``ModelsEndpointTests.cs`` (../../KubernetesAiAgent.Tests/Api/) that the .NET agent starts successfully
+``ModelsEndpointTests.cs`` (../dotnet/KubernetesAiAgent.Tests/Api/) that the .NET agent starts successfully
 with a dead MCP endpoint configured.
 """
 

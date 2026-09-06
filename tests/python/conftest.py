@@ -1,5 +1,5 @@
 """Test fixtures. Plays the role of ``KubernetesAgentTestFactory``
-(../../KubernetesAiAgent.Tests/KubernetesAgentTestFactory.cs): sets environment variables *before* any
+(../dotnet/KubernetesAiAgent.Tests/KubernetesAgentTestFactory.cs): sets environment variables *before* any
 test loads :class:`~kubernetes_agent.config.AgentOptions`, so tests never reach real OpenRouter or a real
 MCP server — the MCP endpoint is a deliberately dead port, exercising the graceful-degradation path.
 """

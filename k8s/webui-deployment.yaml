@@ -1,6 +1,6 @@
 # Custom AG-UI frontend (docs/ARCHITECTURE.md §3.4). Calls the agent directly from browser JavaScript, so
 # VITE_AGENT_URL is baked in at image build time, not configured here at runtime — see
-# src/webui/Dockerfile and k8s/README.md for the port-forward workflow this image's default fallback
+# src/frontend/Dockerfile and k8s/README.md for the port-forward workflow this image's default fallback
 # (http://localhost:5192) is built around.
 apiVersion: apps/v1
 kind: Deployment

@@ -7,16 +7,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 global.json                                   # pins the .NET SDK (10.0.400)
 KubernetesAiAgent.sln
+appHost/
+└── KubernetesAiAgent.AppHost/                # Aspire orchestrator — starts PyAgent + the AG-UI frontend
 docs/
 ├── PRD.md                                    # functional description + acceptance criteria
 └── ARCHITECTURE.md                           # component design, API contracts, config, security, project layout
 src/
-├── KubernetesAiAgent.AppHost/                # Aspire orchestrator — starts PyAgent + the AG-UI webui
-├── KubernetesAiAgent.NetAgent/                # ASP.NET Core agent backend (OpenAI chat-completions + AG-UI)
-├── KubernetesAiAgent.PyAgent/                 # Python agent backend on Microsoft Agent Framework (AG-UI only), uv-managed
-├── KubernetesAiAgent.ServiceDefaults/        # shared Aspire wiring: OpenTelemetry, service discovery, health checks
-├── KubernetesAiAgent.Tests/                  # xUnit tests, references NetAgent
-└── webui/                                    # Vite/React AG-UI frontend, talks to whichever agent the AppHost starts
+├── backend/
+│   ├── dotnet/
+│   │   ├── KubernetesAiAgent.NetAgent/       # ASP.NET Core agent backend (OpenAI chat-completions + AG-UI)
+│   │   └── KubernetesAiAgent.ServiceDefaults/# shared Aspire wiring: OpenTelemetry, service discovery, health checks
+│   └── python/
+│       └── KubernetesAiAgent.PyAgent/        # Python agent backend on Microsoft Agent Framework (AG-UI only), uv-managed
+└── frontend/                                 # Vite/React AG-UI frontend, talks to whichever agent the AppHost starts
+tests/
+├── dotnet/
+│   └── KubernetesAiAgent.Tests/              # xUnit tests, references NetAgent
+└── python/                                   # pytest suite for PyAgent (discovered via its pyproject.toml testpaths)
 k8s/                                          # Kubernetes deployment manifests (placeholder, not yet populated)
 ```
 
@@ -33,14 +40,14 @@ PyAgent — see "Which agent runs" below.
 ## Commands
 
 ```
-dotnet build                                                             # build the whole .NET solution
-dotnet test src/KubernetesAiAgent.Tests/KubernetesAiAgent.Tests.csproj   # run NetAgent's xUnit tests
-dotnet test src/KubernetesAiAgent.Tests/KubernetesAiAgent.Tests.csproj --filter "FullyQualifiedName~<Name>"  # single test
-dotnet run --project src/KubernetesAiAgent.AppHost                       # start the Aspire dashboard + PyAgent + webui locally
+dotnet build                                                                          # build the whole .NET solution
+dotnet test tests/dotnet/KubernetesAiAgent.Tests/KubernetesAiAgent.Tests.csproj       # run NetAgent's xUnit tests
+dotnet test tests/dotnet/KubernetesAiAgent.Tests/KubernetesAiAgent.Tests.csproj --filter "FullyQualifiedName~<Name>"  # single test
+dotnet run --project appHost/KubernetesAiAgent.AppHost                               # start the Aspire dashboard + PyAgent + webui locally
 
-cd src/KubernetesAiAgent.PyAgent
+cd src/backend/python/KubernetesAiAgent.PyAgent
 uv sync                                                                  # install/update the Python virtual environment
-uv run pytest                                                            # run PyAgent's pytest suite
+uv run pytest                                                            # run PyAgent's pytest suite (from ../../../../tests/python)
 uv run main.py                                                           # run PyAgent standalone (binds $PORT, default 5192)
 ```
 
@@ -48,14 +55,14 @@ NetAgent exposes `/health`, `/alive`, `GET /v1/models`, `POST /v1/chat/completio
 exposes only `/health`, `/alive`, and `/agui` — Microsoft Agent Framework for Python has no server-side
 OpenAI chat-completions hosting extension yet, so there's no Python equivalent of `/v1/chat/completions` or
 `/v1/models`. Both are real Microsoft Agent Framework agents backed by OpenRouter (DeepSeek V4 Flash) with
-Kubernetes MCP tools wired in — see `src/KubernetesAiAgent.NetAgent/Agent/KubernetesAgentFactory.cs` and
-`src/KubernetesAiAgent.PyAgent/kubernetes_agent/agent_factory.py`.
+Kubernetes MCP tools wired in — see `src/backend/dotnet/KubernetesAiAgent.NetAgent/Agent/KubernetesAgentFactory.cs` and
+`src/backend/python/KubernetesAiAgent.PyAgent/kubernetes_agent/agent_factory.py`.
 
 Local dev needs an OpenRouter key. For NetAgent standalone:
-`dotnet user-secrets set "Agent:ModelConnection:ApiKey" "<key>" --project src/KubernetesAiAgent.NetAgent`.
+`dotnet user-secrets set "Agent:ModelConnection:ApiKey" "<key>" --project src/backend/dotnet/KubernetesAiAgent.NetAgent`.
 For PyAgent standalone: `export Agent__ModelConnection__ApiKey="<key>"`. When running via the AppHost
 (which currently starts PyAgent), the key is an AppHost parameter instead:
-`dotnet user-secrets set "Parameters:openrouter-api-key" "<key>" --project src/KubernetesAiAgent.AppHost`.
+`dotnet user-secrets set "Parameters:openrouter-api-key" "<key>" --project appHost/KubernetesAiAgent.AppHost`.
 
 ## What this project is
 
@@ -72,7 +79,7 @@ Browser -> webui (AG-UI) -> Kubernetes AI Agent (PyAgent) -> Microsoft Agent Fra
                                     +--> Kubernetes MCP Server (read-only) -> Kubernetes API
 ```
 
-- **webui** (`src/webui`) — Vite/React SPA speaking the AG-UI protocol directly to the agent's `/agui`
+- **webui** (`src/frontend`) — Vite/React SPA speaking the AG-UI protocol directly to the agent's `/agui`
   endpoint from browser JavaScript (no Node-side proxy), rendering agent messages and MCP tool calls as
   they stream. `VITE_AGENT_URL` is wired by the AppHost to whichever agent it starts
   (`agent.GetEndpoint("http")`). This does exercise the agent's CORS policy (allow-any-origin, no
@@ -94,7 +101,7 @@ Browser -> webui (AG-UI) -> Kubernetes AI Agent (PyAgent) -> Microsoft Agent Fra
     `agentconfig.{Environment}.yaml`, `Agent__...` env var nesting) so the same values apply to either.
     One difference: PyAgent's `Agent__McpServers` env var must be a single JSON array (pydantic-settings
     has no equivalent of ASP.NET Core's indexed `Agent__McpServers__0__Name` env vars) — see
-    `src/KubernetesAiAgent.PyAgent/README.md`.
+    `src/backend/python/KubernetesAiAgent.PyAgent/README.md`.
 - **OpenRouter** — the LLM provider, an OpenAI-compatible model marketplace. Configured (not hard-coded) via
   `Agent:ModelConnection:Endpoint` / `Model` / `ApiKey` (NetAgent) or `Agent__ModelConnection__*` (PyAgent);
   both pin `deepseek/deepseek-v4-flash-0731` by default, but neither agent assumes a specific model name.
@@ -153,13 +160,13 @@ Kubernetes Secret values, or credentials returned by tools.
 
 ## Testing expectations (docs/ARCHITECTURE.md §18)
 
-- **NetAgent** unit tests (`src/KubernetesAiAgent.Tests`): configuration validation (`AgentOptionsTests`,
+- **NetAgent** unit tests (`tests/dotnet/KubernetesAiAgent.Tests`): configuration validation (`AgentOptionsTests`,
   `ModelConnectionOptionsTests`), model listing (`ModelsEndpointTests`), all without a live MCP server. Tests
   use `KubernetesAgentTestFactory`, not a bare `WebApplicationFactory<Program>` — it injects dummy OpenRouter
   credentials and an unreachable MCP endpoint via environment variables (set before the host builds, since a
   `ConfigureAppConfiguration` override applies too late for the agent's pre-`Build()` configuration reads) so
   tests never hit real OpenRouter or a real MCP server, and exercise the graceful-degradation path instead.
-- **PyAgent** unit tests (`src/KubernetesAiAgent.PyAgent/tests`, `uv run pytest`): the same shape —
+- **PyAgent** unit tests (`tests/python`, `uv run pytest`): the same shape —
   `test_config.py` mirrors the .NET config-validation tests, `test_agent_factory.py` mirrors the
   boot-with-unreachable-MCP behavior, `test_health.py` covers `/health`/`/alive`. `conftest.py` plays the
   role of `KubernetesAgentTestFactory`, setting the same dummy credentials / dead MCP endpoint via

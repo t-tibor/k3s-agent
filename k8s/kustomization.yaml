@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# agent-secret.example.yaml and agent-configmap.example.yaml are deliberately excluded — both are
+# templates to copy, fill in, and apply/manage by hand directly in the cluster (k8s/README.md), never
+# applied as-is or committed with real values.
+resources:
+  - namespace.yaml
+  - agent-deployment.yaml
+  - agent-service.yaml
+  - webui-deployment.yaml
+  - webui-service.yaml
+
+# Pinned here so `.github/workflows/pyagent-image.yml` can retag it after each GHCR push
+# (`kustomize edit set image`) without touching agent-deployment.yaml. Left at the local/import
+# tag by default — see "Build the images" / "Import the images into k3s" in this directory's README
+# for the no-registry k3s workflow this still supports.
+images:
+  - name: k3s-agent/kubernetes-agent
+    newTag: latest

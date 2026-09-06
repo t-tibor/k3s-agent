@@ -3,8 +3,8 @@
 # runtime image, no secrets baked in, configurable port, health surface reachable by k8s probes).
 #
 # Build from the repo root so the build context can reach uv.lock/pyproject.toml/app code:
-#   docker build -f src/KubernetesAiAgent.PyAgent/Dockerfile -t k3s-agent/kubernetes-agent:latest \
-#     src/KubernetesAiAgent.PyAgent
+#   docker build -f src/backend/python/KubernetesAiAgent.PyAgent/Dockerfile -t k3s-agent/kubernetes-agent:latest \
+#     src/backend/python/KubernetesAiAgent.PyAgent
 
 FROM python:3.12-slim AS build
 

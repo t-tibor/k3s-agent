@@ -1,7 +1,12 @@
+# Template only — this ConfigMap is managed by hand directly in the cluster, not applied from this repo
+# (it's deliberately not a kustomization.yaml resource and has no CI path). Copy this to
+# agent-configmap.yaml (gitignored — see k8s/README.md), fill in your real MCP endpoint(s), and
+# `kubectl apply -f k8s/agent-configmap.yaml` — or create/edit it imperatively with `kubectl edit
+# configmap kubernetes-agent-config -n k3s-agent` so it never touches disk as a file at all.
+#
 # Mounted over the image's baked-in agentconfig.yaml (docs/ARCHITECTURE.md §10: "the whole thing can
-# later be reloaded as a unit from a mounted Kubernetes ConfigMap"). Edit and `kubectl apply` this to
-# change model/MCP config without rebuilding the image (the Deployment still needs a rollout to pick up
-# ConfigMap changes — see k8s/README.md).
+# later be reloaded as a unit from a mounted Kubernetes ConfigMap"). The Deployment still needs a rollout
+# to pick up ConfigMap changes — see k8s/README.md.
 #
 # No secrets belong in here — Agent:ModelConnection:ApiKey comes from the Secret referenced by
 # agent-deployment.yaml instead.

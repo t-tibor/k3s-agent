@@ -483,12 +483,12 @@ $RECYCLE.BIN/
 # Vim temporary swap files
 *.swp
 
-# Node / Vite frontend (src/webui)
+# Node / Vite frontend (src/frontend)
 node_modules/
 dist/
 *.tsbuildinfo
 
-# Python (src/KubernetesAiAgent.PyAgent)
+# Python (src/backend/python/KubernetesAiAgent.PyAgent)
 __pycache__/
 *.py[cod]
 *$py.class
@@ -498,3 +498,7 @@ __pycache__/
 
 # Kubernetes secrets (see k8s/agent-secret.example.yaml — never commit the filled-in version)
 k8s/agent-secret.yaml
+
+# Real ConfigMap is managed by hand in the cluster (see k8s/agent-configmap.example.yaml) — never commit
+# the filled-in version with real MCP endpoints.
+k8s/agent-configmap.yaml

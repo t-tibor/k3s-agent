@@ -1,5 +1,5 @@
 # KubernetesAiAgent.PyAgent, the backend actually run by the Aspire AppHost today (docs/ARCHITECTURE.md
-# §16, §17). AG-UI only — see src/KubernetesAiAgent.PyAgent/README.md.
+# §16, §17). AG-UI only — see src/backend/python/KubernetesAiAgent.PyAgent/README.md.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

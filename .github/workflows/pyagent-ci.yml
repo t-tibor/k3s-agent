@@ -1,0 +1,45 @@
+name: PyAgent CI
+
+# Unit tests for KubernetesAiAgent.PyAgent (CLAUDE.md "Commands" / docs/ARCHITECTURE.md §18) — no live
+# MCP server or OpenRouter key required, see tests/python/conftest.py.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "src/backend/python/KubernetesAiAgent.PyAgent/**"
+      - "tests/python/**"
+      - ".github/workflows/pyagent-ci.yml"
+  pull_request:
+    paths:
+      - "src/backend/python/KubernetesAiAgent.PyAgent/**"
+      - "tests/python/**"
+      - ".github/workflows/pyagent-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/backend/python/KubernetesAiAgent.PyAgent
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.9.5"
+          enable-cache: true
+          cache-dependency-glob: "src/backend/python/KubernetesAiAgent.PyAgent/uv.lock"
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Run tests
+        run: uv run pytest

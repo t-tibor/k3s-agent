@@ -1,5 +1,5 @@
 """Config validation. Mirrors ``AgentOptionsTests.cs`` and ``ModelConnectionOptionsTests.cs``
-(../../KubernetesAiAgent.Tests/Configuration/).
+(../dotnet/KubernetesAiAgent.Tests/Configuration/).
 """
 
 from __future__ import annotations

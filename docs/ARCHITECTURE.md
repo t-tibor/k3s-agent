@@ -50,7 +50,7 @@
                               └─────────────────────────────┘
 ```
 
-A second, browser-direct frontend also exists alongside NextChat: a custom AG-UI web UI (`src/webui`) that
+A second, browser-direct frontend also exists alongside NextChat: a custom AG-UI web UI (`src/frontend`) that
 connects straight from the browser to the agent's `/agui` endpoint rather than through a server-side proxy
 (§3.4). It is not shown in the diagram above to keep the primary request flow readable — see §3.4 and §5.4.
 
@@ -63,7 +63,7 @@ Conceptually:
 ```text
 AppHost
 ├── NextChat container
-├── webui (npm/Vite app, src/webui) — custom AG-UI frontend, see §3.4
+├── webui (npm/Vite app, src/frontend) — custom AG-UI frontend, see §3.4
 ├── Kubernetes Agent project
 └── optional supporting resources
 ```
@@ -186,9 +186,9 @@ This means a developer runs the AppHost and gets a working, pre-configured chat 
 > (§20) — the frontend remains replaceable — is what made this swap low-cost; a future frontend swap should stay
 > similarly cheap.
 
-### 3.4 Custom AG-UI frontend (`src/webui`)
+### 3.4 Custom AG-UI frontend (`src/frontend`)
 
-Alongside NextChat, a second frontend lives in `src/webui`: a small Vite + React + TypeScript single-page app
+Alongside NextChat, a second frontend lives in `src/frontend`: a small Vite + React + TypeScript single-page app
 built on [assistant-ui](https://www.assistant-ui.com/) that speaks the AG-UI protocol (§5.4) directly rather
 than OpenAI chat completions. Its purpose is to make the agent's tool calls visible — every MCP tool call
 (name, arguments, result) renders inline as its own card as it streams, alongside the agent's text — which
@@ -351,7 +351,7 @@ TOOL_CALL_START / TOOL_CALL_ARGS / TOOL_CALL_END / TOOL_CALL_RESULT
 RUN_FINISHED (outcome: { type: "success" } or { type: "interrupt", interrupts: [...] })
 ```
 
-The `src/webui` frontend (§3.4) is the one consumer of this endpoint; NextChat continues to use
+The `src/frontend` frontend (§3.4) is the one consumer of this endpoint; NextChat continues to use
 `/v1/chat/completions` only.
 
 **Statelessness:** `MapAGUIServer` falls back to a no-op session store when none is registered, which is the
@@ -911,66 +911,70 @@ Use automated HTTP tests for the OpenAI-compatible endpoints.
 
 ---
 
-## 19. Suggested project structure
+## 19. Project structure
 
 ```text
+appHost/
+└── KubernetesAiAgent.AppHost/
+    └── AppHost.cs
+docs/
+├── PRD.md
+└── ARCHITECTURE.md
 src/
+├── backend/
+│   ├── dotnet/
+│   │   ├── KubernetesAiAgent.NetAgent/    # .NET implementation — OpenAI chat-completions + AG-UI
+│   │   │   ├── Program.cs
+│   │   │   ├── Agent/
+│   │   │   │   ├── KubernetesAgentFactory.cs  # composes chat client + MCP tools into the AIAgent, see §6.3, §7.4
+│   │   │   │   └── AgentInstructions.cs
+│   │   │   ├── Api/
+│   │   │   │   ├── ModelsEndpoint.cs
+│   │   │   │   └── OpenAiModels.cs
+│   │   │   ├── Configuration/
+│   │   │   │   ├── AgentOptions.cs      # single config root, see §10
+│   │   │   │   ├── ModelConnectionOptions.cs
+│   │   │   │   └── McpServerOptions.cs
+│   │   │   ├── Health/
+│   │   │   ├── agentconfig.yaml         # checked in, no secrets — see §10
+│   │   │   ├── agentconfig.Development.yaml
+│   │   │   ├── appsettings.json         # ASP.NET Core boilerplate only (Logging, AllowedHosts)
+│   │   │   └── appsettings.Development.json
+│   │   └── KubernetesAiAgent.ServiceDefaults/  # shared Aspire wiring: OpenTelemetry, service discovery, health checks
+│   └── python/
+│       └── KubernetesAiAgent.PyAgent/     # Python port on Microsoft Agent Framework, uv-managed — AG-UI only
+│           ├── main.py                  # entrypoint: uvicorn on $PORT
+│           ├── pyproject.toml / uv.lock
+│           ├── kubernetes_agent/
+│           │   ├── app.py               # FastAPI app factory + lifespan, see note below
+│           │   ├── agent_factory.py     # composes chat client + MCP tools, mirrors KubernetesAgentFactory.cs
+│           │   ├── config.py            # pydantic-settings mirror of AgentOptions.cs et al.
+│           │   ├── health.py
+│           │   ├── telemetry.py
+│           │   └── instructions.py
+│           ├── agentconfig.yaml         # same keys/shape as NetAgent's — see §10, §21
+│           └── agentconfig.Development.yaml
 │
-├── KubernetesAiAgent.AppHost/
-│   └── Program.cs
-│
-├── KubernetesAiAgent.NetAgent/            # .NET implementation — OpenAI chat-completions + AG-UI
-│   ├── Program.cs
-│   ├── Agent/
-│   │   ├── KubernetesAgentFactory.cs    # composes chat client + MCP tools into the AIAgent, see §6.3, §7.4
-│   │   └── AgentInstructions.cs
-│   ├── Api/
-│   │   ├── ModelsEndpoint.cs
-│   │   └── OpenAiModels.cs
-│   ├── Configuration/
-│   │   ├── AgentOptions.cs              # single config root, see §10
-│   │   ├── ModelConnectionOptions.cs
-│   │   └── McpServerOptions.cs
-│   ├── Health/
-│   ├── agentconfig.yaml                 # checked in, no secrets — see §10
-│   ├── agentconfig.Development.yaml
-│   ├── appsettings.json                 # ASP.NET Core boilerplate only (Logging, AllowedHosts)
-│   └── appsettings.Development.json
-│
-├── KubernetesAiAgent.PyAgent/             # Python port on Microsoft Agent Framework, uv-managed — AG-UI only
-│   ├── main.py                          # entrypoint: uvicorn on $PORT
-│   ├── pyproject.toml / uv.lock
-│   ├── kubernetes_agent/
-│   │   ├── app.py                       # FastAPI app factory + lifespan, see note below
-│   │   ├── agent_factory.py             # composes chat client + MCP tools, mirrors KubernetesAgentFactory.cs
-│   │   ├── config.py                    # pydantic-settings mirror of AgentOptions.cs et al.
-│   │   ├── health.py
-│   │   ├── telemetry.py
-│   │   └── instructions.py
-│   ├── tests/                           # pytest, mirrors KubernetesAiAgent.Tests
-│   ├── agentconfig.yaml                 # same keys/shape as NetAgent's — see §10, §21
-│   └── agentconfig.Development.yaml
-│
-├── KubernetesAiAgent.Tests/               # xUnit, tests NetAgent only
-│   ├── Api/
-│   ├── Configuration/
-│   └── Integration/
-│
-├── webui/                                # custom AG-UI frontend, see §3.4 — Vite + React + TypeScript
-│   ├── src/
-│   │   ├── agent.ts                      # HttpAgent -> `${VITE_AGENT_URL}/agui`
-│   │   ├── App.tsx                       # useAgUiRuntime + AssistantRuntimeProvider
-│   │   ├── Thread.tsx                    # transcript + composer
-│   │   └── ToolCall.tsx                  # catch-all tool-call renderer
-│   ├── package.json
-│   └── vite.config.ts
-│
-├── .gitignore
-└── README.md
+└── frontend/                              # custom AG-UI frontend, see §3.4 — Vite + React + TypeScript
+    ├── src/
+    │   ├── agent.ts                       # HttpAgent -> `${VITE_AGENT_URL}/agui`
+    │   ├── App.tsx                        # useAgUiRuntime + AssistantRuntimeProvider
+    │   ├── Thread.tsx                     # transcript + composer
+    │   └── ToolCall.tsx                   # catch-all tool-call renderer
+    ├── package.json
+    └── vite.config.ts
+tests/
+├── dotnet/
+│   └── KubernetesAiAgent.Tests/           # xUnit, tests NetAgent only
+│       ├── Api/
+│       ├── Configuration/
+│       └── Integration/
+└── python/                                # pytest, mirrors KubernetesAiAgent.Tests — discovered via PyAgent's
+                                            # pyproject.toml testpaths (it lives outside the uv project directory)
 k8s/
+.gitignore
+README.md
 ```
-
-The exact structure may be adjusted during implementation.
 
 **Note — `KubernetesAiAgent.PyAgent` is AG-UI only.** Microsoft Agent Framework for Python has no
 server-side hosting extension equivalent to .NET's `Microsoft.Agents.AI.Hosting.OpenAI`
@@ -978,7 +982,7 @@ server-side hosting extension equivalent to .NET's `Microsoft.Agents.AI.Hosting.
 (`agent_framework_ag_ui.add_agent_framework_fastapi_endpoint`, see §5.3, §6.3, §7.4 for the .NET
 equivalents this mirrors) exists as of this writing. PyAgent therefore exposes `/agui`, `/health`, and
 `/alive`, but not `/v1/chat/completions` or `GET /v1/models` — NextChat (§3.2, §18.3) cannot be pointed at
-it; only the custom AG-UI frontend (`src/webui`) can. If a Python OpenAI-compatible hosting extension is
+it; only the custom AG-UI frontend (`src/frontend`) can. If a Python OpenAI-compatible hosting extension is
 released later, `KubernetesAiAgent.NetAgent`'s API contract (§5) is the target to match.
 
 ---
