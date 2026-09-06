@@ -21,8 +21,8 @@ docker build -f dotnet/KubernetesAiAgent.NetAgent/Dockerfile -t k3s-agent/kubern
 ```
 
 This single image builds the frontend (via the `.csproj`'s publish-time MSBuild target — needs Node.js,
-installed inside the build stage) and the .NET backend, and serves both from one container. No
-`VITE_AGENT_URL` build-arg is needed — the built frontend calls a same-origin, relative `/agui`.
+installed inside the build stage) and the .NET backend, and serves both from one container. No build-time
+configuration is needed for the frontend — it always calls a same-origin, relative `/agui`.
 
 ## 2. Import the image into k3s
 

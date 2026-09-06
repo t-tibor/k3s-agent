@@ -87,7 +87,7 @@ server-side, so the browser still only ever talks to one origin either way.
 
 - **webui** (`dotnet/KubernetesAiAgent.WebUI`) — Vite/React SPA speaking the AG-UI protocol. It always calls
   a same-origin relative `/agui` (`src/agent.ts`) and renders agent messages and MCP tool calls as they
-  stream. In local Aspire dev, `VITE_AGENT_URL` is wired by the AppHost to the agent's endpoint
+  stream. In local Aspire dev, `VITE_DEV_PROXY_TARGET` is wired by the AppHost to the agent's origin
   (`agent.GetEndpoint("http")`) and consumed only by `vite.config.ts`'s dev-server proxy (Node-side, not
   exposed to client JS) to forward `/agui` there; in the production image, NetAgent builds and serves this
   same bundle directly (see `dotnet/KubernetesAiAgent.NetAgent/Dockerfile` and its `.csproj`'s

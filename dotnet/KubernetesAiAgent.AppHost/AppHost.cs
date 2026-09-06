@@ -25,11 +25,12 @@ var agent = builder.AddProject<Projects.KubernetesAiAgent_NetAgent>("agent")
 // cross-origin, so the Agent needs no CORS policy. This npm-app resource exists purely for the local
 // hot-reload dev loop, not for how the app is deployed.
 // WithHttpEndpoint's env: "PORT" is what vite.config.ts reads to bind the port Aspire allocated; the
-// VITE_AGENT_URL env var below is what it reads as the dev-server proxy's target (Node-side config, not
-// exposed to client-side JS — see vite.config.ts).
+// VITE_DEV_PROXY_TARGET env var below is what it reads as the dev-server proxy's target (Node-side config,
+// not exposed to client-side JS — see vite.config.ts). Just the agent's origin (no /agui suffix) — the
+// proxy appends the incoming request path itself.
 builder.AddNpmApp("webui", "../KubernetesAiAgent.WebUI", "dev")
     .WithHttpEndpoint(env: "PORT")
-    .WithEnvironment("VITE_AGENT_URL", agent.GetEndpoint("http"))
+    .WithEnvironment("VITE_DEV_PROXY_TARGET", agent.GetEndpoint("http"))
     .WithReference(agent)
     .WaitFor(agent);
 

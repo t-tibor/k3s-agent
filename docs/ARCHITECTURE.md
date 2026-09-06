@@ -71,9 +71,9 @@ AppHost
 ```
 
 The AppHost should configure service discovery between each frontend and the agent where supported —
-specifically, NextChat's `BASE_URL` environment variable and the webui's `VITE_AGENT_URL` environment variable
-should both be wired to the agent's actual endpoint by the AppHost, not typed manually into a UI or hard-coded
-into frontend source (see §3.3, §3.4).
+specifically, NextChat's `BASE_URL` environment variable and the webui's `VITE_DEV_PROXY_TARGET` environment
+variable should both be wired to the agent's actual endpoint by the AppHost, not typed manually into a UI or
+hard-coded into frontend source (see §3.3, §3.4).
 
 The Kubernetes MCP server is an externally configured dependency from the Aspire application's perspective. It may run inside the same Kubernetes cluster but is not owned by the Aspire application.
 
@@ -90,8 +90,8 @@ The Kubernetes MCP server is an externally configured dependency from the Aspire
 - Start NextChat as a container.
 - Start the custom AG-UI webui as an npm/Vite app resource (§3.4).
 - Configure environment variables and references — including wiring NextChat's `BASE_URL` and the webui's
-  `VITE_AGENT_URL` to the agent's endpoint, so no manual configuration step is needed after starting the app
-  (§3.3, §3.4).
+  `VITE_DEV_PROXY_TARGET` to the agent's endpoint, so no manual configuration step is needed after starting
+  the app (§3.3, §3.4).
 - Provide service discovery where applicable.
 - Provide a convenient local development experience.
 - Make the resource topology visible in the Aspire dashboard.
@@ -215,10 +215,11 @@ Implementation notes:
 - The AG-UI client (`@ag-ui/client`'s `HttpAgent`) is wired into assistant-ui's React runtime via
   `@assistant-ui/react-ag-ui`'s `useAgUiRuntime`, with `agent` as the only required option.
 - `src/agent.ts` constructs `HttpAgent` with a hard-coded relative `url: "/agui"` — no environment-specific
-  URL is ever baked into the client bundle. The `VITE_AGENT_URL` environment variable does still exist,
-  wired by the AppHost (§1.1, §2.1) to the agent's actual endpoint, but it's consumed only by
-  `vite.config.ts`'s dev-server proxy configuration (Node-side code, never exposed to the client bundle) as
-  the proxy target — never hard-coded, per §20 design principle 7.
+  URL is ever baked into the client bundle. The `VITE_DEV_PROXY_TARGET` environment variable does still
+  exist, wired by the AppHost (§1.1, §2.1) to the agent's origin (no path), but it's consumed only by
+  `vite.config.ts`'s dev-server proxy configuration (Node-side code, never exposed to the client bundle
+  despite the `VITE_` prefix — that only matters for values read via `import.meta.env`, which this isn't)
+  as the proxy target — never hard-coded, per §20 design principle 7.
 - Tool calls are always executed automatically; there is no approval/interrupt step. Tool-call rendering is
   registered once as a catch-all fallback (`tools: { Fallback: ToolCall }`) rather than per tool name, since the
   set of MCP tools is server-side configuration (`agentconfig.yaml`, §7) unknown to the frontend at build time.
@@ -966,7 +967,7 @@ dotnet/
 ├── KubernetesAiAgent.ServiceDefaults/  # shared Aspire wiring: OpenTelemetry, service discovery, health checks
 └── KubernetesAiAgent.WebUI/            # custom AG-UI frontend, see §3.4 — Vite + React + TypeScript
     ├── src/
-    │   ├── agent.ts                    # HttpAgent -> `${VITE_AGENT_URL}/agui` (relative when unset)
+    │   ├── agent.ts                    # HttpAgent -> "/agui" (always relative, same-origin)
     │   ├── App.tsx                     # useAgUiRuntime + AssistantRuntimeProvider
     │   ├── Thread.tsx                  # transcript + composer
     │   └── ToolCall.tsx                # catch-all tool-call renderer
