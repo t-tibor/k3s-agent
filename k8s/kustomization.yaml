@@ -11,11 +11,14 @@ resources:
 - webui-deployment.yaml
 - webui-service.yaml
 
-# Pinned here so `.github/workflows/pyagent-image.yml` can retag it after each GHCR push
-# (`kustomize edit set image`) without touching agent-deployment.yaml. Left at the local/import
-# tag by default — see "Build the images" / "Import the images into k3s" in this directory's README
-# for the no-registry k3s workflow this still supports.
+# Pinned here so `.github/workflows/pyagent-image.yml` / `webui-image.yml` can retag them after each
+# GHCR push (`kustomize edit set image`) without touching agent-deployment.yaml / webui-deployment.yaml.
+# Left at the local/import tag by default — see "Build the images" / "Import the images into k3s" in
+# this directory's README for the no-registry k3s workflow this still supports.
 images:
 - name: k3s-agent/kubernetes-agent
   newName: ghcr.io/t-tibor/k3s-agent/pyagent
   newTag: 3a1c676
+- name: k3s-agent/webui
+  newName: ghcr.io/t-tibor/k3s-agent/webui
+  newTag: latest
