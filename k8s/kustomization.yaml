@@ -21,4 +21,4 @@ images:
   newTag: 3a1c676
 - name: k3s-agent/webui
   newName: ghcr.io/t-tibor/k3s-agent/webui
-  newTag: latest
+  newTag: 9aa3092
