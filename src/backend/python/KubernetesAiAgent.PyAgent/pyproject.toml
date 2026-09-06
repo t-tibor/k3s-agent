@@ -7,7 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "agent-framework-ag-ui>=1.2.1,<2",
     "agent-framework-openai>=1.14.1",
-    "mcp>=1.0",
+    "mcp>=1.0,<2",
     "opentelemetry-exporter-otlp>=1.29",
     "opentelemetry-instrumentation-fastapi>=0.50b0",
     "opentelemetry-instrumentation-httpx>=0.50b0",
